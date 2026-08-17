@@ -1,0 +1,6 @@
+{
+  "name": "HENZ Health Care POS",
+  "description": "Smart medical & laboratory supplies POS, student checklist pre-ordering with QR pickup, high-speed barcode checkout, and FDA expiry inventory management for HENZ Health Care Products Trading.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

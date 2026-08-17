@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "PreOrder": {
+      "title": "PreOrder",
+      "description": "Customer digital pre-order for medical supplies and clinical kits",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "contactNumber": { "type": "string" },
+        "email": { "type": "string" },
+        "schoolOrClinic": { "type": "string" },
+        "courseOrYear": { "type": "string" },
+        "pickupBranch": { "type": "string" },
+        "targetPickupDate": { "type": "string" },
+        "items": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "paymentStatus": { "type": "string" },
+        "orderStatus": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "orderNumber", "customerName", "pickupBranch", "totalAmount", "orderStatus", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Medical product inventory item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "barcode": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "retailPrice": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "stockMain": { "type": "number" },
+        "stockUSA": { "type": "number" },
+        "reorderLevel": { "type": "number" },
+        "fefoBatches": { "type": "string" },
+        "requiresRx": { "type": "boolean" },
+        "isVatExempt": { "type": "boolean" }
+      },
+      "required": ["id", "name", "category", "retailPrice"]
+    }
+  },
+  "firestore": {
+    "/preorders/{preOrderId}": {
+      "schema": "PreOrder",
+      "description": "Real-time clinical pre-orders collection"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Medical inventory products catalog"
+    }
+  }
+}
