@@ -21,6 +21,8 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "types": ["vite/client"]   // 👈 Added this line
+  },
+  "include": ["src", "env.d.ts"] // 👈 Added this line
 }
