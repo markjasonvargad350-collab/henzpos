@@ -1,27 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Medical Pre-Orders: Customers can submit pre-orders and track them; Staff can update status
+    
+    // ----------------------------------------------------------------------
+    // LEVEL 1: SAFER PUBLIC RULES (Works with your current LocalStorage Auth)
+    // ----------------------------------------------------------------------
+
+    // Medical Pre-Orders: Anyone can create and read. Anyone can update (needed for your staff UI). 
+    // BUT no one can delete an order once it is placed.
     match /preorders/{preOrderId} {
-      allow read, write: if true;
+      allow read, create, update: if true;
+      allow delete: if false; 
     }
 
-    // Inventory Products: Customers can read stock/prices; Staff can manage inventory
+    // Inventory Products: Anyone can read stock/prices. Anyone can update/create (for staff UI).
+    // Deletions are allowed here since admins might need to remove discontinued products.
     match /products/{productId} {
       allow read, write: if true;
     }
 
-    // Sales Transactions and History
+    // Sales Transactions: Anyone can read and create a transaction.
+    // SECURED: Once a transaction is saved, it CANNOT be modified or deleted by anyone. (Tamper-proof)
     match /transactions/{transactionId} {
-      allow read, write: if true;
+      allow read, create: if true;
+      allow update, delete: if false; 
     }
 
-    // Stock Transfers between branches
+    // Stock Transfers: Anyone can read and create a transfer log.
+    // SECURED: Once logged, a transfer record CANNOT be altered or deleted. (Audit trail protected)
     match /stock_transfers/{transferId} {
-      allow read, write: if true;
+      allow read, create: if true;
+      allow update, delete: if false;
     }
 
-    // Starter Kits & Presets
+    // Starter Kits & Presets: Anyone can read, create, update, and delete.
     match /preset_kits/{kitId} {
       allow read, write: if true;
     }
@@ -32,4 +44,3 @@ service cloud.firestore {
     }
   }
 }
-

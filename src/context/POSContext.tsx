@@ -324,6 +324,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let unsubPreorders: (() => void) | null = null;
     let unsubProducts: (() => void) | null = null;
+    let isInitialLoad = true; // Prevents sound spam on initial page load
 
     try {
       // 1. Live Pre-Orders Listener
@@ -333,12 +334,25 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (snapshot) => {
           if (!snapshot.empty) {
             const list: CustomerPreOrder[] = [];
+            
+            // Detect newly added orders for Admin Notifications
+            snapshot.docChanges().forEach((change) => {
+              if (change.type === 'added' && !isInitialLoad) {
+                // Only trigger the sound if the current user is an Admin
+                const currentRole = localStorage.getItem('henz_user_role_v3');
+                if (currentRole === 'admin') {
+                  soundEffects.playQRScanChime(); 
+                }
+              }
+            });
+
             snapshot.forEach((docSnap) => {
               const data = docSnap.data() as CustomerPreOrder;
               if (data && data.orderNumber) {
                 list.push(data);
               }
             });
+
             if (list.length > 0) {
               list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
               setPreOrders(list);
@@ -349,6 +363,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setDoc(doc(db, 'preorders', po.id), po).catch(() => {});
             });
           }
+          
+          isInitialLoad = false; // Mark initial load as complete
         },
         (error) => {
           console.warn('Firestore real-time pre-orders offline/fallback:', error);
@@ -361,9 +377,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Firestore initialization notice:', err);
     }
 
-    return () => {
-      if (unsubPreorders) unsubPreorders();
-      if (unsubProducts) unsubProducts();
+   return () => {
+      if (unsubPreorders) {
+        (unsubPreorders as () => void)();
+      }
+      if (unsubProducts) {
+        (unsubProducts as () => void)();
+      }
     };
   }, []);
 
@@ -750,6 +770,74 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return null;
     }
 
+    // Add Customer Pre-Order to the Centralized Database
+  const addCustomerPreOrder = (orderInput: {
+    customerName: string;
+    schoolOrClinic: string;
+    contactNumber: string;
+    email?: string;
+    pickupBranch: BranchName;
+    targetPickupDate: string;
+    items: { productId: string; quantity: number }[];
+    paymentStatus: CustomerPreOrder['paymentStatus'];
+    paymentMethod: CustomerPreOrder['paymentMethod'];
+    paymentRefNumber?: string;
+    notes?: string;
+  }): CustomerPreOrder => {
+    const nextOrderNum = `HNZ-2026-${String(preOrders.length + 101).padStart(4, '0')}`;
+    const orderItemsMapped = orderInput.items.map((i) => {
+      const prod = products.find((p) => p.id === i.productId);
+      return {
+        productId: i.productId,
+        productName: prod ? prod.name : 'Medical Item',
+        barcode: prod ? prod.barcode : '000000000000',
+        quantity: i.quantity,
+        unitPrice: prod ? prod.price : 0,
+        unit: prod ? prod.unit : 'pcs',
+      };
+    });
+
+    const totalAmount = orderItemsMapped.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
+    const totalItems = orderItemsMapped.reduce((acc, item) => acc + item.quantity, 0);
+
+    const newOrder: CustomerPreOrder = {
+      id: `po-${Date.now()}`,
+      orderNumber: nextOrderNum,
+      qrCodeValue: `HENZ-ORDER-${nextOrderNum}`,
+      customerName: orderInput.customerName,
+      schoolOrClinic: orderInput.schoolOrClinic,
+      contactNumber: orderInput.contactNumber,
+      email: orderInput.email,
+      pickupBranch: orderInput.pickupBranch,
+      targetPickupDate: orderInput.targetPickupDate,
+      items: orderItemsMapped,
+      totalItems,
+      totalAmount,
+      paymentStatus: orderInput.paymentStatus,
+      paymentMethod: orderInput.paymentMethod,
+      paymentRefNumber: orderInput.paymentRefNumber,
+      orderStatus: 'Pending',
+      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      notes: orderInput.notes,
+    };
+
+    setPreOrders((prev) => [newOrder, ...prev]);
+    soundEffects.playQRScanChime();
+
+    // ---------------------------------------------------------
+    // WHERE YOU SAVE TO FIRESTORE:
+    // ---------------------------------------------------------
+    try {
+      setDoc(doc(db, 'preorders', newOrder.id), newOrder).catch((err) => {
+        console.warn('Offline Firestore save:', err);
+      });
+    } catch {
+      // offline fallback
+    }
+
+    return newOrder;
+  };
+
     const subtotal = active.items.reduce((acc, item) => acc + item.subtotal, 0);
     const discount = saleData.discountAmount || 0;
     const grandTotal = Math.max(0, subtotal - discount);
@@ -1134,5 +1222,3 @@ export const usePOS = () => {
   }
   return context;
 };
-
-
