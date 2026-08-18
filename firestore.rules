@@ -1,46 +1,66 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // ----------------------------------------------------------------------
-    // LEVEL 1: SAFER PUBLIC RULES (Works with your current LocalStorage Auth)
+    // Access model (backed by Firebase Auth):
+    //   - Every visitor is signed in — customers anonymously, staff with the
+    //     shared Email/Password account.
+    //   - "Staff" = any signed-in user whose provider is NOT anonymous.
     // ----------------------------------------------------------------------
 
-    // Medical Pre-Orders: Anyone can create and read. Anyone can update (needed for your staff UI). 
-    // BUT no one can delete an order once it is placed.
-    match /preorders/{preOrderId} {
-      allow read, create, update: if true;
-      allow delete: if false; 
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Inventory Products: Anyone can read stock/prices. Anyone can update/create (for staff UI).
-    // Deletions are allowed here since admins might need to remove discontinued products.
+    function isStaff() {
+      return isSignedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    // Medical Pre-Orders: customers (anonymous) may read and place orders;
+    // only staff may update status/packing; no one may ever delete a placed order.
+    match /preOrders/{preOrderId} {
+      allow read, create: if isSignedIn();
+      allow update: if isStaff();
+      allow delete: if false;
+    }
+
+    // Inventory Products: anyone signed in can read stock/prices; only staff
+    // may create, edit, restock, or remove products.
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isStaff();
     }
 
-    // Sales Transactions: Anyone can read and create a transaction.
-    // SECURED: Once a transaction is saved, it CANNOT be modified or deleted by anyone. (Tamper-proof)
+    // Sales Transactions: readable by signed-in sessions; only staff may record
+    // a sale. Once written, a transaction is immutable (tamper-proof).
     match /transactions/{transactionId} {
-      allow read, create: if true;
-      allow update, delete: if false; 
-    }
-
-    // Stock Transfers: Anyone can read and create a transfer log.
-    // SECURED: Once logged, a transfer record CANNOT be altered or deleted. (Audit trail protected)
-    match /stock_transfers/{transferId} {
-      allow read, create: if true;
+      allow read: if isSignedIn();
+      allow create: if isStaff();
       allow update, delete: if false;
     }
 
-    // Starter Kits & Presets: Anyone can read, create, update, and delete.
-    match /preset_kits/{kitId} {
-      allow read, write: if true;
+    // Stock Transfers: readable by signed-in sessions; only staff may log a
+    // transfer. Once logged, the audit record is immutable.
+    match /stock_transfers/{transferId} {
+      allow read: if isSignedIn();
+      allow create: if isStaff();
+      allow update, delete: if false;
     }
 
-    // System connectivity and heartbeat
+    // Starter Kits & Presets: readable by all signed-in sessions; only staff
+    // may manage the preset catalog.
+    match /preset_kits/{kitId} {
+      allow read: if isSignedIn();
+      allow write: if isStaff();
+    }
+
+    // System connectivity / heartbeat: readable by any signed-in session;
+    // writes are staff-only.
     match /system/{systemDoc} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isStaff();
     }
   }
 }

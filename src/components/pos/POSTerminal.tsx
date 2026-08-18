@@ -110,9 +110,11 @@ export const POSTerminal: React.FC = () => {
         if (buffer.length >= 3) {
           const scannedCode = buffer.trim();
           
-          // Check if pre-order ref
+          // Check if pre-order ref (scanned QR encodes qrCodeValue; also accept order number)
           const matchPO = preOrders.find(
-            (po) => po.referenceCode.toLowerCase() === scannedCode.toLowerCase()
+            (po) =>
+              (po.qrCodeValue || '').toLowerCase() === scannedCode.toLowerCase() ||
+              (po.orderNumber || '').toLowerCase() === scannedCode.toLowerCase()
           );
           if (matchPO) {
             e.preventDefault();
@@ -155,10 +157,11 @@ export const POSTerminal: React.FC = () => {
     const query = barcodeInput.trim();
     if (!query) return;
 
-    // Check if pre-order ref
+    // Check if pre-order ref (typed order number, QR value, or internal id)
     const matchPO = preOrders.find(
       (po) =>
-        po.referenceCode.toLowerCase() === query.toLowerCase() ||
+        (po.orderNumber || '').toLowerCase() === query.toLowerCase() ||
+        (po.qrCodeValue || '').toLowerCase() === query.toLowerCase() ||
         po.id.toLowerCase() === query.toLowerCase()
     );
     if (matchPO) {

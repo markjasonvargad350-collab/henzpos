@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   CreditCard,
   ClipboardList,
+  PackageCheck,
   Boxes,
   BarChart3,
   Building2,
@@ -11,7 +12,9 @@ import {
   Settings,
   Stethoscope,
   ShoppingBag,
-  ExternalLink,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import { usePOS, ActiveNavView, BRANCH_MAIN, BRANCH_USA } from '../../context/POSContext';
 import { StoreSettingsModal } from './StoreSettingsModal';
@@ -30,6 +33,8 @@ export const HeaderNav: React.FC = () => {
     setActiveBranch,
     preOrders,
     heldCarts,
+    isCloudOnline,
+    isSyncing,
   } = usePOS();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -40,7 +45,8 @@ export const HeaderNav: React.FC = () => {
 
   const adminNavItems: { id: ActiveNavView; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
     { id: 'pos', label: 'Cashier Register', icon: CreditCard, badge: heldCarts.length > 1 ? heldCarts.length : undefined },
-    { id: 'checklist-portal', label: 'Pre-Order Portal', icon: ClipboardList, badge: pendingPreOrdersCount > 0 ? pendingPreOrdersCount : undefined },
+    { id: 'checklist-portal', label: 'Pre-Order Portal', icon: ClipboardList },
+    { id: 'prep-queue', label: 'Prep Desk', icon: PackageCheck, badge: pendingPreOrdersCount > 0 ? pendingPreOrdersCount : undefined },
     { id: 'inventory', label: 'Inventory & Expiry', icon: Boxes },
     { id: 'reports', label: 'Sales & Reports', icon: BarChart3 },
   ];
@@ -62,18 +68,34 @@ export const HeaderNav: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Facebook Page Official Link */}
-            <a
-              href="https://www.facebook.com/profile.php?id=100054474294473"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[11px] text-blue-300 hover:text-white px-2 py-0.5 rounded bg-blue-950/70 border border-blue-600/40 transition cursor-pointer font-medium"
-              title="Official HENZ Facebook Page"
+            {/* Cloud sync status — hybrid database health at a glance */}
+            <div
+              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border font-semibold ${
+                isSyncing
+                  ? 'bg-amber-950/70 border-amber-600/40 text-amber-300'
+                  : isCloudOnline
+                  ? 'bg-emerald-950/70 border-emerald-600/40 text-emerald-300'
+                  : 'bg-slate-800 border-slate-600/50 text-slate-300'
+              }`}
+              title={
+                isSyncing
+                  ? 'Saving changes to the cloud…'
+                  : isCloudOnline
+                  ? 'Online — all branches synced in real time'
+                  : 'Offline — changes are saved on this device and will sync automatically when back online'
+              }
             >
-              <span className="font-bold text-blue-400">f</span>
-              <span className="hidden sm:inline">Facebook</span>
-              <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
-            </a>
+              {isSyncing ? (
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              ) : isCloudOnline ? (
+                <Cloud className="w-3 h-3" />
+              ) : (
+                <CloudOff className="w-3 h-3" />
+              )}
+              <span className="hidden sm:inline">
+                {isSyncing ? 'Syncing…' : isCloudOnline ? 'Online' : 'Offline'}
+              </span>
+            </div>
 
             {/* Quick Share Student Link */}
             <button

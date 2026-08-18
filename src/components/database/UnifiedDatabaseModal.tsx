@@ -282,19 +282,6 @@ export const UnifiedDatabaseModal: React.FC = () => {
                   <div className="text-xs text-slate-500 mt-0.5">Total retail asset value</div>
                 </div>
               </div>
-
-              {/* Redundancy Elimination Summary */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-emerald-950">
-                <div className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                  <div className="text-sm space-y-1">
-                    <h4 className="font-bold text-emerald-900">System Redundancy Optimization Complete</h4>
-                    <p className="text-emerald-800 text-xs leading-relaxed">
-                      All obsolete warehouse mock properties and duplicate stock trackers have been cleaned and consolidated into a single unified catalog structure. Both physical branches query and mutate the exact same database records with zero sync conflict or race conditions.
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 

@@ -92,18 +92,18 @@ export const ReportsView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 space-y-6 text-[#c9d1d9]">
+    <div className="max-w-7xl mx-auto p-4 space-y-6 text-slate-800">
       {/* Header */}
-      <div className="bg-[#161b22] p-5 rounded-2xl border border-[#30363d] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+          <div className="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl border border-emerald-200">
             <BarChart3 className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white leading-tight">
+            <h2 className="text-lg font-bold text-slate-900 leading-tight">
               Medical Sales Analytics & BIR Audit Logs
             </h2>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-500">
               HENZ Health Care Products Trading • Daily sales revenue, mode breakdown, and transaction receipts
             </p>
           </div>
@@ -120,81 +120,81 @@ export const ReportsView: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-[#161b22] p-4 rounded-xl border border-[#30363d] shadow-sm">
-          <span className="text-xs text-gray-400 font-medium">Gross Revenue (VAT Incl)</span>
-          <div className="text-2xl font-extrabold text-white mt-1 font-mono">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-xs text-slate-500 font-medium">Gross Revenue (VAT Incl)</span>
+          <div className="text-2xl font-extrabold text-slate-900 mt-1 font-mono">
             ₱{totalSalesRevenue.toLocaleString()}
           </div>
-          <span className="text-[11px] text-emerald-400 font-semibold">{transactions.length} Transactions Completed</span>
+          <span className="text-[11px] text-emerald-600 font-semibold">{transactions.length} Transactions Completed</span>
         </div>
 
-        <div className="bg-[#161b22] p-4 rounded-xl border border-[#30363d] shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-400 font-medium">Cash Collections</span>
-            <DollarSign className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs text-slate-500 font-medium">Cash Collections</span>
+            <DollarSign className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-xl font-bold text-emerald-400 mt-1 font-mono">
+          <div className="text-xl font-bold text-emerald-600 mt-1 font-mono">
             ₱{cashSales.toLocaleString()}
           </div>
-          <span className="text-[11px] text-gray-500">
+          <span className="text-[11px] text-slate-500">
             {totalSalesRevenue > 0 ? Math.round((cashSales / totalSalesRevenue) * 100) : 0}% of Total Volume
           </span>
         </div>
 
-        <div className="bg-[#161b22] p-4 rounded-xl border border-[#30363d] shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-400 font-medium">GCash QR Payments</span>
-            <Smartphone className="w-4 h-4 text-blue-400" />
+            <span className="text-xs text-slate-500 font-medium">GCash QR Payments</span>
+            <Smartphone className="w-4 h-4 text-blue-600" />
           </div>
-          <div className="text-xl font-bold text-blue-400 mt-1 font-mono">
+          <div className="text-xl font-bold text-blue-600 mt-1 font-mono">
             ₱{gcashSales.toLocaleString()}
           </div>
-          <span className="text-[11px] text-gray-500">
+          <span className="text-[11px] text-slate-500">
             {totalSalesRevenue > 0 ? Math.round((gcashSales / totalSalesRevenue) * 100) : 0}% of Total Volume
           </span>
         </div>
 
-        <div className="bg-[#161b22] p-4 rounded-xl border border-[#30363d] shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-400 font-medium">Bank Transfers</span>
-            <Building className="w-4 h-4 text-indigo-400" />
+            <span className="text-xs text-slate-500 font-medium">Bank Transfers</span>
+            <Building className="w-4 h-4 text-indigo-600" />
           </div>
-          <div className="text-xl font-bold text-indigo-400 mt-1 font-mono">
+          <div className="text-xl font-bold text-indigo-600 mt-1 font-mono">
             ₱{bankSales.toLocaleString()}
           </div>
-          <span className="text-[11px] text-gray-500">
+          <span className="text-[11px] text-slate-500">
             {totalSalesRevenue > 0 ? Math.round((bankSales / totalSalesRevenue) * 100) : 0}% of Total Volume
           </span>
         </div>
       </div>
 
       {/* Top Fast-Moving Products Ranking */}
-      <div className="bg-[#161b22] p-5 rounded-2xl border border-[#30363d] shadow-sm space-y-3">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Flame className="w-5 h-5 text-amber-400" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wide">
+            <Flame className="w-5 h-5 text-amber-500" />
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
               Top Fast-Moving Medical Supplies Sold
             </h3>
           </div>
-          <span className="text-xs text-gray-400 font-medium">Ranked by unit volume</span>
+          <span className="text-xs text-slate-500 font-medium">Ranked by unit volume</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {topProducts.map((prod, idx) => (
             <div
               key={idx}
-              className="p-3 bg-[#0d1117] rounded-xl border border-[#30363d] flex items-center justify-between gap-2"
+              className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="w-6 h-6 flex items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold shrink-0 font-mono">
                   #{idx + 1}
                 </span>
-                <span className="text-xs font-bold text-white truncate">{prod.name}</span>
+                <span className="text-xs font-bold text-slate-900 truncate">{prod.name}</span>
               </div>
               <div className="text-right shrink-0">
-                <span className="text-xs font-extrabold text-emerald-400 block">{prod.qty} units</span>
-                <span className="text-[10px] text-gray-400 font-mono">₱{prod.revenue.toLocaleString()}</span>
+                <span className="text-xs font-extrabold text-emerald-600 block">{prod.qty} units</span>
+                <span className="text-[10px] text-slate-500 font-mono">₱{prod.revenue.toLocaleString()}</span>
               </div>
             </div>
           ))}
@@ -202,25 +202,25 @@ export const ReportsView: React.FC = () => {
       </div>
 
       {/* Transactions Audit Log Table */}
-      <div className="bg-[#161b22] rounded-2xl border border-[#30363d] shadow-sm overflow-hidden space-y-4 p-5">
-        <div className="flex flex-col md:flex-row gap-3 items-center justify-between pb-3 border-b border-[#30363d]">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wide">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
+        <div className="flex flex-col md:flex-row gap-3 items-center justify-between pb-3 border-b border-slate-200">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">
             Sales Transactions Audit Trail ({filteredTransactions.length})
           </h3>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <div className="relative">
-              <Search className="w-4 h-4 text-gray-500 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
               <input
                 type="text"
                 placeholder="Search receipt # / customer / ref..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-3 py-1.5 text-xs bg-[#0a0b0d] text-[#c9d1d9] border border-[#30363d] rounded-lg focus:outline-none focus:border-emerald-500 placeholder:text-gray-600 w-60 font-medium"
+                className="pl-9 pr-3 py-1.5 text-xs bg-white text-slate-800 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 placeholder:text-slate-400 w-60 font-medium"
               />
             </div>
 
-            <div className="flex items-center bg-[#0d1117] p-0.5 rounded-lg border border-[#30363d]">
+            <div className="flex items-center bg-slate-50 p-0.5 rounded-lg border border-slate-200">
               {['All', 'Cash', 'GCash', 'Bank Payment'].map((method) => (
                 <button
                   key={method}
@@ -228,7 +228,7 @@ export const ReportsView: React.FC = () => {
                   className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
                     selectedPaymentFilter === method
                       ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
-                      : 'text-gray-400 hover:text-gray-200'
+                      : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
                   {method}
@@ -240,7 +240,7 @@ export const ReportsView: React.FC = () => {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-[#0d1117] border-b border-[#30363d] text-gray-400 font-bold uppercase text-[10px] tracking-wider">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
               <tr>
                 <th className="py-2.5 px-3">Receipt No</th>
                 <th className="py-2.5 px-3">Date / Time</th>
@@ -251,18 +251,18 @@ export const ReportsView: React.FC = () => {
                 <th className="py-2.5 px-3 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#30363d]">
+            <tbody className="divide-y divide-slate-200">
               {filteredTransactions.map((tx) => (
-                <tr key={tx.id} className="hover:bg-[#1a202c] transition">
-                  <td className="py-3 px-3 font-mono font-bold text-white">
+                <tr key={tx.id} className="hover:bg-slate-100 transition">
+                  <td className="py-3 px-3 font-mono font-bold text-slate-900">
                     {tx.receiptNumber}
                   </td>
-                  <td className="py-3 px-3 text-gray-400 text-[11px]">
+                  <td className="py-3 px-3 text-slate-500 text-[11px]">
                     {tx.timestamp}
                   </td>
                   <td className="py-3 px-3">
-                    <div className="font-bold text-white">{tx.customerName}</div>
-                    <div className="text-[10px] text-gray-400">
+                    <div className="font-bold text-slate-900">{tx.customerName}</div>
+                    <div className="text-[10px] text-slate-500">
                       {tx.customerType} • {tx.branch}
                     </div>
                   </td>
@@ -270,34 +270,34 @@ export const ReportsView: React.FC = () => {
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${
                         tx.paymentMethod === 'Cash'
-                          ? 'bg-emerald-950/50 text-emerald-300 border-emerald-500/30'
+                          ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
                           : tx.paymentMethod === 'GCash'
-                          ? 'bg-blue-950/50 text-blue-300 border-blue-500/30'
-                          : 'bg-indigo-950/50 text-indigo-300 border-indigo-500/30'
+                          ? 'bg-blue-100 text-blue-700 border-blue-200'
+                          : 'bg-indigo-100 text-indigo-700 border-indigo-200'
                       }`}
                     >
                       {tx.paymentMethod}
                     </span>
                     {tx.referenceNumber && (
-                      <div className="text-[10px] font-mono text-gray-400 mt-0.5">
+                      <div className="text-[10px] font-mono text-slate-500 mt-0.5">
                         Ref: {tx.referenceNumber}
                       </div>
                     )}
                   </td>
-                  <td className="py-3 px-3 text-center font-mono font-semibold text-gray-300">
+                  <td className="py-3 px-3 text-center font-mono font-semibold text-slate-700">
                     {tx.totalItemCount} pcs ({tx.items.length} lines)
                   </td>
-                  <td className="py-3 px-3 text-right font-mono font-bold text-emerald-400 text-xs">
+                  <td className="py-3 px-3 text-right font-mono font-bold text-emerald-600 text-xs">
                     ₱{tx.grandTotal.toLocaleString()}
                   </td>
                   <td className="py-3 px-3 text-center">
                     <div className="flex items-center justify-center gap-1.5">
                       <button
                         onClick={() => setActiveReceiptTransaction(tx)}
-                        className="px-2.5 py-1 bg-[#0d1117] hover:bg-[#1c232d] text-gray-200 border border-[#30363d] rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                         title="View Full Sales Invoice Receipt"
                       >
-                        <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+                        <Receipt className="w-3.5 h-3.5 text-emerald-600" />
                         <span>Receipt</span>
                       </button>
                     </div>

@@ -71,45 +71,45 @@ export const SharePreOrderModal: React.FC<SharePreOrderModalProps> = ({ isOpen, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="bg-[#161b22] text-[#c9d1d9] w-full max-w-lg rounded-2xl shadow-2xl border border-emerald-500/40 p-6 space-y-5 relative">
+      <div className="bg-white text-slate-800 w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-5 relative">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-[#21262d] transition cursor-pointer"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-900 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Header Badge */}
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/40">
+          <div className="p-3 bg-emerald-100 text-emerald-700 rounded-xl border border-emerald-200">
             <Share2 className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-white leading-tight">
+            <h3 className="text-base font-bold text-slate-900 leading-tight">
               Share Customer Pre-Order Link
             </h3>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-500">
               Students and clinics can pre-order with no login required
             </p>
           </div>
         </div>
 
         {/* QR Code and Direct URL Box */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
           <div className="sm:col-span-4 flex flex-col items-center justify-center">
-            <div className="bg-white p-2.5 rounded-xl shadow-md border border-gray-200">
+            <div className="bg-white p-2.5 rounded-xl shadow-md border border-slate-200">
               <QRCodeRenderer value={preOrderUrl} size={110} />
             </div>
-            <span className="text-[10px] text-gray-400 font-mono mt-1.5 flex items-center gap-1">
-              <Smartphone className="w-3 h-3 text-emerald-400" />
+            <span className="text-[10px] text-slate-500 font-mono mt-1.5 flex items-center gap-1">
+              <Smartphone className="w-3 h-3 text-emerald-600" />
               <span>Scan to open portal</span>
             </span>
           </div>
 
           <div className="sm:col-span-8 space-y-2.5">
             <div>
-              <label className="block text-xs font-bold text-gray-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Direct Pre-Order URL:
               </label>
               <div className="flex items-center gap-1.5">
@@ -117,15 +117,15 @@ export const SharePreOrderModal: React.FC<SharePreOrderModalProps> = ({ isOpen, 
                   type="text"
                   readOnly
                   value={preOrderUrl}
-                  className="w-full px-3 py-2 text-xs bg-[#161b22] text-emerald-400 border border-[#30363d] rounded-xl font-mono focus:outline-none select-all"
+                  className="w-full px-3 py-2 text-xs bg-white text-emerald-700 border border-slate-200 rounded-xl font-mono focus:outline-none select-all"
                 />
                 <button
                   type="button"
                   onClick={handleCopyLink}
                   className={`px-3 py-2 rounded-xl text-xs font-bold transition shrink-0 flex items-center gap-1 cursor-pointer ${
                     copied
-                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
-                      : 'bg-[#21262d] hover:bg-[#30363d] text-white border border-[#30363d]'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/20'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
                   }`}
                 >
                   {copied ? (
@@ -143,8 +143,8 @@ export const SharePreOrderModal: React.FC<SharePreOrderModalProps> = ({ isOpen, 
               </div>
             </div>
 
-            <div className="text-[11px] text-gray-400 space-y-1">
-              <p className="flex items-center gap-1.5 text-emerald-300 font-medium">
+            <div className="text-[11px] text-slate-500 space-y-1">
+              <p className="flex items-center gap-1.5 text-emerald-700 font-medium">
                 <Sparkles className="w-3 h-3" />
                 <span>Zero Login Required for Customers & Students</span>
               </p>
@@ -157,45 +157,45 @@ export const SharePreOrderModal: React.FC<SharePreOrderModalProps> = ({ isOpen, 
 
         {/* Quick Social & Group Sharing */}
         <div className="space-y-2">
-          <label className="block text-xs font-bold text-gray-300">
+          <label className="block text-xs font-bold text-slate-700">
             Share directly to Student Groups & Channels:
           </label>
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={handleShareMessenger}
-              className="p-2.5 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-semibold text-gray-200 hover:text-white transition flex flex-col items-center gap-1 cursor-pointer"
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 transition flex flex-col items-center gap-1 cursor-pointer"
             >
-              <MessageSquare className="w-4 h-4 text-blue-400" />
+              <MessageSquare className="w-4 h-4 text-blue-600" />
               <span>Facebook / GC</span>
             </button>
 
             <button
               type="button"
               onClick={handleShareViber}
-              className="p-2.5 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-semibold text-gray-200 hover:text-white transition flex flex-col items-center gap-1 cursor-pointer"
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 transition flex flex-col items-center gap-1 cursor-pointer"
             >
-              <Smartphone className="w-4 h-4 text-purple-400" />
+              <Smartphone className="w-4 h-4 text-purple-600" />
               <span>Viber Group</span>
             </button>
 
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="p-2.5 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-semibold text-gray-200 hover:text-white transition flex flex-col items-center gap-1 cursor-pointer"
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 transition flex flex-col items-center gap-1 cursor-pointer"
             >
-              <MessageSquare className="w-4 h-4 text-emerald-400" />
+              <MessageSquare className="w-4 h-4 text-emerald-600" />
               <span>WhatsApp</span>
             </button>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-3 border-t border-[#30363d]">
+        <div className="flex items-center justify-between pt-3 border-t border-slate-200">
           <button
             type="button"
             onClick={handleOpenNewTab}
-            className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold cursor-pointer"
+            className="text-xs text-emerald-700 hover:text-emerald-800 flex items-center gap-1 font-semibold cursor-pointer"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             <span>Open Customer Link in New Tab</span>
@@ -204,7 +204,7 @@ export const SharePreOrderModal: React.FC<SharePreOrderModalProps> = ({ isOpen, 
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] text-gray-300 rounded-xl text-xs font-semibold border border-[#30363d] transition cursor-pointer"
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 transition cursor-pointer"
           >
             Done
           </button>

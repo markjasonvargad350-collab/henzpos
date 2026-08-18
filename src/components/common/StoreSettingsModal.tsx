@@ -206,16 +206,16 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                   <label className="font-bold text-slate-700 block mb-1">Store Name on Header</label>
                   <input
                     type="text"
-                    value={receiptSettings.storeName}
-                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, storeName: e.target.value })}
+                    value={receiptSettings.storeHeaderTitle}
+                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, storeHeaderTitle: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">Printer Roll Width</label>
                   <select
-                    value={receiptSettings.printerWidth}
-                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, printerWidth: e.target.value as any })}
+                    value={receiptSettings.paperWidth}
+                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, paperWidth: e.target.value as any })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 bg-white"
                   >
                     <option value="80mm">80mm Standard POS Thermal Roll</option>
@@ -227,8 +227,8 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                   <label className="font-bold text-slate-700 block mb-1">BIR Tax Identification Number (TIN)</label>
                   <input
                     type="text"
-                    value={receiptSettings.taxIdNumber}
-                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, taxIdNumber: e.target.value })}
+                    value={receiptSettings.tinNumber}
+                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, tinNumber: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
                   />
                 </div>
@@ -236,8 +236,8 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                   <label className="font-bold text-slate-700 block mb-1">FDA License to Operate (LTO)</label>
                   <input
                     type="text"
-                    value={receiptSettings.fdaLicenseNumber}
-                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, fdaLicenseNumber: e.target.value })}
+                    value={receiptSettings.fdaLtoNumber}
+                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, fdaLtoNumber: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
                   />
                 </div>
@@ -247,8 +247,8 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                 <label className="font-bold text-slate-700 block mb-1">Footer Medical Notice</label>
                 <input
                   type="text"
-                  value={receiptSettings.footerNotice}
-                  onChange={(e) => setReceiptSettingsState({ ...receiptSettings, footerNotice: e.target.value })}
+                  value={receiptSettings.customFooterNote}
+                  onChange={(e) => setReceiptSettingsState({ ...receiptSettings, customFooterNote: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
@@ -327,7 +327,7 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                   </span>
                 </div>
                 <p className="text-slate-500">
-                  Staff default PINs: <code className="bg-white px-1.5 py-0.5 rounded border">8888</code> or <code className="bg-white px-1.5 py-0.5 rounded border">admin123</code>
+                  Cashiers sign in with the shared staff account (one secure password for the whole store). Contact the store owner to change it.
                 </p>
                 {isAdminAuthenticated && (
                   <div className="pt-2">

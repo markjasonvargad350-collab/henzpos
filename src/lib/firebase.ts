@@ -1,17 +1,14 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   getFirestore,
-  collection,
   doc,
-  setDoc,
-  getDocs,
-  onSnapshot,
-  query,
-  updateDoc,
-  deleteDoc,
   getDocFromServer,
   Firestore,
 } from 'firebase/firestore';
+import { getAuth, Auth } from 'firebase/auth';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -23,16 +20,41 @@ const firebaseConfig = {
   appId: firebaseConfigJson.appId,
 };
 
-// Initialize Firebase App
+// Initialize Firebase App (singleton across HMR reloads)
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with the provisioned database ID
-export const db: Firestore = getFirestore(
-  app,
-  firebaseConfigJson.firestoreDatabaseId || '(default)'
-);
+const databaseId = firebaseConfigJson.firestoreDatabaseId || '(default)';
 
-// Connection verification
+// Initialize Firestore with IndexedDB-backed offline persistence so the POS is a
+// true hybrid database: reads and writes work offline, queue locally, and sync
+// automatically when connectivity returns. persistentMultipleTabManager keeps
+// multiple open tabs (e.g. cashier register + prep desk on the same machine)
+// consistent by sharing one local cache.
+let firestore: Firestore;
+try {
+  firestore = initializeFirestore(
+    app,
+    {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    },
+    databaseId
+  );
+} catch {
+  // Firestore was already initialized (e.g. during Vite HMR) — reuse the instance.
+  firestore = getFirestore(app, databaseId);
+}
+
+export const db: Firestore = firestore;
+
+// Firebase Authentication. Customers browse/pre-order under an anonymous session;
+// staff share one Email/Password account. STAFF_EMAIL is fixed in config so the
+// login screen only needs a password. (Owner: change this to the real address and
+// create that account in the Firebase console — see hand-off notes.)
+export const auth: Auth = getAuth(app);
+export const STAFF_EMAIL: string = firebaseConfigJson.staffEmail || 'staff@henzhealthcare.ph';
+
+// Connection verification — forces a server read (bypassing the offline cache) so
+// it reports true only when the device can actually reach Firestore right now.
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
     const probePromise = getDocFromServer(doc(db, 'system', 'connection_test'));
@@ -47,4 +69,3 @@ export async function testFirestoreConnection(): Promise<boolean> {
     return false;
   }
 }
-

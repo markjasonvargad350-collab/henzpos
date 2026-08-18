@@ -10,7 +10,6 @@ import { POSTerminal } from './components/pos/POSTerminal';
 import { DigitalChecklistPortal } from './components/checklist/DigitalChecklistPortal';
 import { OrderPrepQueue } from './components/prep/OrderPrepQueue';
 import { InventoryManagement } from './components/inventory/InventoryManagement';
-import { ExpiryTrackingView } from './components/expiry/ExpiryTrackingView';
 import { ReportsView } from './components/reports/ReportsView';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { SharePreOrderModal } from './components/common/SharePreOrderModal';
@@ -43,7 +42,6 @@ const MainLayout: React.FC = () => {
             {activeView === 'checklist-portal' && <DigitalChecklistPortal />}
             {activeView === 'prep-queue' && <OrderPrepQueue />}
             {activeView === 'inventory' && <InventoryManagement />}
-            {activeView === 'expiry' && <ExpiryTrackingView />}
             {activeView === 'reports' && <ReportsView />}
           </>
         )}

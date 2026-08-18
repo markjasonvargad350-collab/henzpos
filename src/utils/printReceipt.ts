@@ -224,9 +224,6 @@ export async function generateReceiptHTML(
     <div style="font-size: ${smallFontSize}; color: #666;">
       ${settings.returnPolicyNote}
     </div>
-    <div style="font-size: 7.5px; color: #888; margin-top: 6px;">
-      FB: facebook.com/profile.php?id=100054474294473
-    </div>
   </div>
 </body>
 </html>`;

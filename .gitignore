@@ -5,4 +5,7 @@ coverage/
 .DS_Store
 *.log
 .env
-!.env.example
+.env.example
+
+# Claude Code local session data (plans, memory, settings) — not part of the app
+.claude/

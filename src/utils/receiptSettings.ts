@@ -29,7 +29,7 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   showCashierName: true,
   showBarcode: true,
   showQrCode: true,
-  customFooterNote: 'Thank you for choosing HENZ Healthcare Products Trading! Facebook: fb.com/profile.php?id=100054474294473 | Hotline: +63 917 302 1995',
+  customFooterNote: 'Thank you for choosing HENZ Healthcare Products Trading! | Hotline: +63 917 302 1995',
   returnPolicyNote: 'RETURN POLICY: Sterile goods & surgical blades non-refundable once seal is broken. Replacement within 7 days with this slip.',
   enableSoundOnPrint: true,
 };

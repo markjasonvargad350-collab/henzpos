@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Product,
   CartItem,
@@ -14,58 +14,42 @@ import {
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { INITIAL_PREORDERS } from '../data/initialPreOrders';
 import { INITIAL_TRANSACTIONS } from '../data/initialTransactions';
+import { INITIAL_TRANSFERS } from '../data/initialTransfers';
 import { PRESET_KITS } from '../data/presetKits';
 import { soundEffects } from '../utils/audio';
-import { db, testFirestoreConnection } from '../lib/firebase';
-import { collection, doc, setDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db, auth, STAFF_EMAIL, testFirestoreConnection } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  increment,
+} from 'firebase/firestore';
+import {
+  onAuthStateChanged,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
 
 export type UserRole = 'user' | 'admin';
-export type ActiveNavView = 'pos' | 'checklist-portal' | 'prep-queue' | 'inventory' | 'expiry' | 'reports';
+export type ActiveNavView = 'pos' | 'checklist-portal' | 'prep-queue' | 'inventory' | 'reports';
 
 export const BRANCH_MAIN: BranchName = 'Main Branch - Casa Conching Bldg., Jalandoni St, Iloilo City Proper';
 export const BRANCH_USA: BranchName = 'USA Branch - In front of University of San Agustin Gate 5 (USA Gym)';
 
-const INITIAL_TRANSFERS: StockTransferRecord[] = [
-  {
-    id: 'tr-001',
-    transferNumber: 'HENZ-TR-20260816-01',
-    timestamp: '2026-08-16 09:30',
-    productId: 'prod-001',
-    productName: 'Examination Latex Gloves Powder-Free (Medium)',
-    sku: 'PPE-GLV-LAT-M',
-    fromBranch: BRANCH_MAIN,
-    toBranch: BRANCH_USA,
-    quantity: 25,
-    transferredBy: 'Warehouse Logistics Staff (Van #1)',
-    notes: 'Replenishment for San Agustin BSN student surge',
-  },
-  {
-    id: 'tr-002',
-    transferNumber: 'HENZ-TR-20260815-02',
-    timestamp: '2026-08-15 14:10',
-    productId: 'prod-007',
-    productName: 'Aneroid Sphygmomanometer with Adult Cuff & Pouch',
-    sku: 'DIA-SPHYG-ANEROID',
-    fromBranch: BRANCH_MAIN,
-    toBranch: BRANCH_USA,
-    quantity: 15,
-    transferredBy: 'Stock Custodian Marcos',
-    notes: 'BSN 1st Year kit staging',
-  },
-  {
-    id: 'tr-003',
-    transferNumber: 'HENZ-TR-20260814-03',
-    timestamp: '2026-08-14 11:20',
-    productId: 'prod-041',
-    productName: 'Isopropyl Alcohol 70% with Moisturizer 500ml',
-    sku: 'ANT-ALC-70-ISOP-500',
-    fromBranch: BRANCH_MAIN,
-    toBranch: BRANCH_USA,
-    quantity: 30,
-    transferredBy: 'Staff Elena',
-    notes: 'Clinical Antiseptic replenishment',
-  },
-];
+// Firestore collection names — single source of truth (Firestore names are case-sensitive).
+// These must exactly match the collection names in firestore.rules.
+export const COLLECTIONS = {
+  products: 'products',
+  transactions: 'transactions',
+  preOrders: 'preOrders',
+  stockTransfers: 'stock_transfers',
+  presetKits: 'preset_kits',
+} as const;
 
 interface POSContextType {
   userRole: UserRole;
@@ -77,7 +61,7 @@ interface POSContextType {
   setIsShareModalOpen: (open: boolean) => void;
   isDatabaseModalOpen: boolean;
   setIsDatabaseModalOpen: (open: boolean) => void;
-  loginAdmin: (passwordOrPin: string, username?: string) => boolean;
+  loginAdmin: (password: string) => Promise<boolean>;
   logoutAdmin: () => void;
   products: Product[];
   presetKits: PresetKit[];
@@ -145,6 +129,8 @@ interface POSContextType {
   updateProduct: (product: Product) => void;
   addProduct: (product: Omit<Product, 'id'>) => void;
   deleteProduct: (productId: string) => void;
+  isCloudOnline: boolean;
+  isSyncing: boolean;
   databaseMeta: UnifiedDatabaseMeta;
   exportDatabaseJSON: () => void;
   importDatabaseJSON: (jsonString: string) => boolean;
@@ -162,28 +148,29 @@ interface POSContextType {
 const POSContext = createContext<POSContextType | undefined>(undefined);
 
 export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Admin authentication state
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    const saved = localStorage.getItem('henz_admin_auth_v3');
-    return saved === 'true';
-  });
+  // Staff authentication is backed by Firebase Auth. isAdminAuthenticated is true
+  // only when signed in with the shared staff Email/Password account (a
+  // non-anonymous user); anonymous customers are always false. The Firebase SDK
+  // persists the session, so a reload keeps staff signed in.
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  // Gate the Firestore listeners until the first auth session exists, so listens
+  // never fire without a token (locked security rules require request.auth != null).
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  // Mirrors staff status for use inside the (stable) snapshot listener closure.
+  const isStaffRef = useRef<boolean>(false);
 
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
 
-  // User vs Admin role mode (No login required for users to view & submit pre-order checklists)
-  const [userRole, setUserRoleState] = useState<UserRole>(() => {
-    if (typeof window !== 'undefined' && window.location.search.includes('mode=preorder')) {
-      return 'user';
-    }
-    const savedRole = localStorage.getItem('henz_user_role_v3');
-    const savedAuth = localStorage.getItem('henz_admin_auth_v3') === 'true';
-    if (savedRole === 'admin' && savedAuth) {
-      return 'admin';
-    }
-    return 'user';
-  });
+  // Customer share links (?mode=preorder) stay pinned to the portal even for staff.
+  const preorderPinned =
+    typeof window !== 'undefined' && window.location.search.includes('mode=preorder');
+
+  // User vs Admin UI mode. No login is required for customers to view & submit
+  // pre-order checklists; the auth listener promotes the mode to 'admin' once the
+  // shared staff account signs in.
+  const [userRole, setUserRoleState] = useState<UserRole>('user');
 
   const setUserRole = (role: UserRole) => {
     if (role === 'admin') {
@@ -192,61 +179,40 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
       setUserRoleState('admin');
-      localStorage.setItem('henz_user_role_v3', 'admin');
     } else {
       setUserRoleState('user');
-      localStorage.setItem('henz_user_role_v3', 'user');
       setActiveView('checklist-portal');
     }
   };
 
-  const loginAdmin = (passwordOrPin: string, username?: string): boolean => {
-    const cleaned = passwordOrPin.trim();
-    if (
-      cleaned === '8888' ||
-      cleaned === 'admin123' ||
-      cleaned === 'henz2026' ||
-      cleaned === 'admin' ||
-      cleaned === '1234' ||
-      (username === 'admin' && cleaned === 'admin')
-    ) {
-      setIsAdminAuthenticated(true);
-      setUserRoleState('admin');
-      localStorage.setItem('henz_admin_auth_v3', 'true');
-      localStorage.setItem('henz_user_role_v3', 'admin');
-      if (activeView === 'checklist-portal') {
-        setActiveView('pos');
-      }
+  // Sign in as staff using the shared account. onAuthStateChanged then flips
+  // isAdminAuthenticated and switches into the POS workspace.
+  const loginAdmin = async (password: string): Promise<boolean> => {
+    try {
+      await signInWithEmailAndPassword(auth, STAFF_EMAIL, password.trim());
       return true;
+    } catch (err) {
+      console.warn('Staff login failed:', err);
+      return false;
     }
-    return false;
   };
 
-  const logoutAdmin = () => {
-    setIsAdminAuthenticated(false);
-    setUserRoleState('user');
-    localStorage.removeItem('henz_admin_auth_v3');
-    localStorage.setItem('henz_user_role_v3', 'user');
+  // Sign out of staff and drop back to an anonymous customer session. The auth
+  // listener re-signs-in anonymously and resets the UI to the portal.
+  const logoutAdmin = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.warn('Sign-out failed:', err);
+    }
     setActiveView('checklist-portal');
   };
 
-  // 1 Unified Central Database: Products Table with 2-Branch Inventory (Main Branch & USA Branch)
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('henz_products_v3');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((p: any) => ({
-            ...p,
-            stockMainBranch: p.stockMainBranch ?? 45,
-            stockUsaBranch: p.stockUsaBranch ?? p.stockWarehouse ?? 55,
-          }));
-        }
-      } catch { /* ignore */ }
-    }
-    return INITIAL_PRODUCTS;
-  });
+  // ── Unified Central Database (Firestore is the source of truth) ──────────────
+  // These five datasets are driven entirely by the Firestore onSnapshot listeners
+  // below. Firestore's IndexedDB offline cache persists them across reloads and
+  // serves them when offline, so we start empty and let the cache/server fill them.
+  const [products, setProducts] = useState<Product[]>([]);
 
   const [activeBranch, setActiveBranch] = useState<BranchName>(() => {
     const saved = localStorage.getItem('henz_active_branch_v3');
@@ -273,45 +239,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeCartIndex, setActiveCartIndex] = useState<number>(0);
 
   // 1 Unified Central Database: Transactions Table (tagged by branch)
-  const [transactions, setTransactions] = useState<SaleTransaction[]>(() => {
-    const saved = localStorage.getItem('henz_transactions_v3');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return INITIAL_TRANSACTIONS;
-  });
+  const [transactions, setTransactions] = useState<SaleTransaction[]>([]);
 
   // 1 Unified Central Database: Pre-Orders Table (tagged by pickup branch)
-  const [preOrders, setPreOrders] = useState<CustomerPreOrder[]>(() => {
-    const saved = localStorage.getItem('henz_preorders_v3');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return INITIAL_PREORDERS;
-  });
+  const [preOrders, setPreOrders] = useState<CustomerPreOrder[]>([]);
 
   // 1 Unified Central Database: Inter-Branch Stock Transfers Ledger
-  const [stockTransfers, setStockTransfers] = useState<StockTransferRecord[]>(() => {
-    const saved = localStorage.getItem('henz_stock_transfers_v3');
-    if (saved) {
-      try { return JSON.parse(saved); } catch { /* ignore */ }
-    }
-    return INITIAL_TRANSFERS;
-  });
+  const [stockTransfers, setStockTransfers] = useState<StockTransferRecord[]>([]);
 
   // Starter Checklist Preset Kits (Manageable & Persistent)
-  const [presetKits, setPresetKits] = useState<PresetKit[]>(() => {
-    const saved = localStorage.getItem('henz_preset_kits_v3');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch { /* ignore */ }
-    }
-    return PRESET_KITS;
-  });
+  const [presetKits, setPresetKits] = useState<PresetKit[]>([]);
 
   const [isJulyPeakSeasonMode, setIsJulyPeakSeasonMode] = useState<boolean>(true);
   const [activeView, setActiveView] = useState<ActiveNavView>(() => {
@@ -320,142 +257,203 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [recentCompletedSale, setRecentCompletedSale] = useState<SaleTransaction | null>(null);
   const [activePreOrderModal, setActivePreOrderModal] = useState<CustomerPreOrder | null>(null);
 
-  // Firebase Cloud Firestore Real-Time Listener
+  // Cloud sync status — drives the header online/offline + "syncing" indicator.
+  const [isCloudOnline, setIsCloudOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const pendingWritesRef = useRef<Record<string, boolean>>({});
+
+  // ── Firebase Auth session ────────────────────────────────────────────────────
+  // Every visitor gets a session: customers sign in anonymously; staff replace it
+  // by signing in with the shared Email/Password account. This drives both the
+  // admin gate and (via authReady) when the Firestore listeners may attach.
   useEffect(() => {
-    let unsubPreorders: (() => void) | null = null;
-    let unsubProducts: (() => void) | null = null;
-    let isInitialLoad = true; // Prevents sound spam on initial page load
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        // No session yet — provision an anonymous one so reads/writes carry a token.
+        isStaffRef.current = false;
+        setIsAdminAuthenticated(false);
+        signInAnonymously(auth).catch((err) => {
+          console.warn(
+            'Anonymous sign-in failed — enable Anonymous authentication in the Firebase console. ' +
+              'Loading in degraded mode against the currently-deployed rules.',
+            err
+          );
+          // Don't freeze on a blank screen: still open the listeners so the POS
+          // loads if the deployed rules allow it (e.g. during initial setup).
+          setAuthReady(true);
+        });
+        return;
+      }
+      const isStaff = !user.isAnonymous;
+      isStaffRef.current = isStaff;
+      setIsAdminAuthenticated(isStaff);
+      if (isStaff && !preorderPinned) {
+        setUserRoleState('admin');
+        setActiveView((v) => (v === 'checklist-portal' ? 'pos' : v));
+      } else if (!isStaff) {
+        setUserRoleState('user');
+      }
+      setAuthReady(true);
+    });
+    return () => unsub();
+  }, [preorderPinned]);
+
+  // ── Firestore real-time sync engine ─────────────────────────────────────────
+  // One onSnapshot listener per collection keeps all five datasets live. With the
+  // offline cache enabled (see lib/firebase.ts), these fire from cache instantly
+  // (even offline) and again from the server on reconnect, so the UI is always
+  // driven by Firestore — never by ad-hoc local copies.
+  useEffect(() => {
+    if (!authReady) return; // Hold off until a Firebase Auth session exists.
+    let isInitialLoad = true; // Prevents new-order chime spam on first paint
+    const seeded: Record<string, boolean> = {};
+
+    // Aggregate pending-write status across collections for the header indicator.
+    const markPending = (key: string, snap: { metadata: { hasPendingWrites: boolean } }) => {
+      pendingWritesRef.current[key] = snap.metadata.hasPendingWrites;
+      setIsSyncing(Object.values(pendingWritesRef.current).some(Boolean));
+    };
+
+    // Seed a collection's defaults ONLY when the server (not the offline cache)
+    // confirms it is empty. This first-run provisioning never clobbers existing
+    // cloud data, because a cold offline cache reports fromCache = true.
+    const seedIfEmpty = (
+      key: string,
+      snap: { empty: boolean; metadata: { fromCache: boolean } },
+      colName: string,
+      initial: { id: string }[]
+    ) => {
+      if (snap.empty && !snap.metadata.fromCache && !seeded[key]) {
+        seeded[key] = true;
+        initial.forEach((item) => {
+          setDoc(doc(db, colName, item.id), item).catch(() => {});
+        });
+      }
+    };
+
+    const subscriptions: Array<() => void> = [];
 
     try {
-      // 1. Live Pre-Orders Listener
-      const preOrdersRef = collection(db, 'preOrders');
-      unsubPreorders = onSnapshot(
-        preOrdersRef,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const list: CustomerPreOrder[] = [];
-            
-            // Detect newly added orders for Admin Notifications
-            snapshot.docChanges().forEach((change) => {
-              if (change.type === 'added' && !isInitialLoad) {
-                // Only trigger the sound if the current user is an Admin
-                const currentRole = localStorage.getItem('henz_user_role_v3');
-                if (currentRole === 'admin') {
-                  soundEffects.playQRScanChime(); 
-                }
-              }
-            });
-
-            snapshot.forEach((docSnap) => {
-              const data = docSnap.data() as CustomerPreOrder;
-              if (data && data.orderNumber) {
-                list.push(data);
-              }
-            });
-
-            if (list.length > 0) {
-              list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-              setPreOrders(list);
-            }
-          } else {
-            // Seed initial preorders to Firestore if newly provisioned
-            INITIAL_PREORDERS.forEach((po) => {
-              setDoc(doc(db, 'preOrders', po.id), po).catch(() => {});
-            });
-          }
-          
-          isInitialLoad = false; // Mark initial load as complete
-        },
-        (error) => {
-          console.warn('Firestore real-time pre-orders offline/fallback:', error);
-        }
+      // 1. Products
+      subscriptions.push(
+        onSnapshot(
+          collection(db, COLLECTIONS.products),
+          { includeMetadataChanges: true },
+          (snap) => {
+            const list: Product[] = [];
+            snap.forEach((d) => list.push(d.data() as Product));
+            setProducts(list);
+            markPending('products', snap);
+            seedIfEmpty('products', snap, COLLECTIONS.products, INITIAL_PRODUCTS);
+          },
+          (err) => console.warn('Firestore products listener:', err)
+        )
       );
 
-      // 2. Test initial connectivity
+      // 2. Sales Transactions
+      subscriptions.push(
+        onSnapshot(
+          collection(db, COLLECTIONS.transactions),
+          { includeMetadataChanges: true },
+          (snap) => {
+            const list: SaleTransaction[] = [];
+            snap.forEach((d) => list.push(d.data() as SaleTransaction));
+            list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            setTransactions(list);
+            markPending('transactions', snap);
+            seedIfEmpty('transactions', snap, COLLECTIONS.transactions, INITIAL_TRANSACTIONS);
+          },
+          (err) => console.warn('Firestore transactions listener:', err)
+        )
+      );
+
+      // 3. Customer Pre-Orders (chimes for staff when a new order arrives from a customer)
+      subscriptions.push(
+        onSnapshot(
+          collection(db, COLLECTIONS.preOrders),
+          { includeMetadataChanges: true },
+          (snap) => {
+            snap.docChanges().forEach((change) => {
+              if (change.type === 'added' && !isInitialLoad && !change.doc.metadata.hasPendingWrites) {
+                if (isStaffRef.current) soundEffects.playQRScanChime();
+              }
+            });
+            const list: CustomerPreOrder[] = [];
+            snap.forEach((d) => {
+              const data = d.data() as CustomerPreOrder;
+              if (data && data.orderNumber) list.push(data);
+            });
+            list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setPreOrders(list);
+            markPending('preOrders', snap);
+            seedIfEmpty('preOrders', snap, COLLECTIONS.preOrders, INITIAL_PREORDERS);
+            isInitialLoad = false;
+          },
+          (err) => console.warn('Firestore pre-orders listener:', err)
+        )
+      );
+
+      // 4. Inter-Branch Stock Transfers ledger
+      subscriptions.push(
+        onSnapshot(
+          collection(db, COLLECTIONS.stockTransfers),
+          { includeMetadataChanges: true },
+          (snap) => {
+            const list: StockTransferRecord[] = [];
+            snap.forEach((d) => list.push(d.data() as StockTransferRecord));
+            list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+            setStockTransfers(list);
+            markPending('stockTransfers', snap);
+            seedIfEmpty('stockTransfers', snap, COLLECTIONS.stockTransfers, INITIAL_TRANSFERS);
+          },
+          (err) => console.warn('Firestore stock-transfers listener:', err)
+        )
+      );
+
+      // 5. Preset Starter Kits
+      subscriptions.push(
+        onSnapshot(
+          collection(db, COLLECTIONS.presetKits),
+          { includeMetadataChanges: true },
+          (snap) => {
+            const list: PresetKit[] = [];
+            snap.forEach((d) => list.push(d.data() as PresetKit));
+            setPresetKits(list);
+            markPending('presetKits', snap);
+            seedIfEmpty('presetKits', snap, COLLECTIONS.presetKits, PRESET_KITS);
+          },
+          (err) => console.warn('Firestore preset-kits listener:', err)
+        )
+      );
+
+      // Probe initial connectivity (best-effort; the online/offline effect owns the flag)
       testFirestoreConnection().catch(() => {});
     } catch (err) {
       console.warn('Firestore initialization notice:', err);
     }
 
-   return () => {
-      if (unsubPreorders) {
-        (unsubPreorders as () => void)();
-      }
-      if (unsubProducts) {
-        (unsubProducts as () => void)();
-      }
-    };
-  }, []);
-
-  // BroadcastChannel and Storage listener for instant real-time synchronization across multiple tabs/windows
-  useEffect(() => {
-    let broadcastChannel: BroadcastChannel | null = null;
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        broadcastChannel = new BroadcastChannel('henz_pos_sync_channel');
-        broadcastChannel.onmessage = (event) => {
-          if (!event.data || !event.data.type) return;
-          const { type, payload } = event.data;
-          if (type === 'SYNC_PREORDERS' && Array.isArray(payload)) {
-            setPreOrders(payload);
-          } else if (type === 'SYNC_PRODUCTS' && Array.isArray(payload)) {
-            setProducts(payload);
-          } else if (type === 'SYNC_TRANSACTIONS' && Array.isArray(payload)) {
-            setTransactions(payload);
-          } else if (type === 'SYNC_TRANSFERS' && Array.isArray(payload)) {
-            setStockTransfers(payload);
-          } else if (type === 'SYNC_KITS' && Array.isArray(payload)) {
-            setPresetKits(payload);
-          }
-        };
-      }
-    } catch { /* ignore */ }
-
-    const handleStorageChange = (e: StorageEvent) => {
-      if (!e.newValue) return;
-      try {
-        if (e.key === 'henz_preorders_v3') {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setPreOrders(parsed);
-        } else if (e.key === 'henz_products_v3') {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setProducts(parsed);
-        } else if (e.key === 'henz_transactions_v3') {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setTransactions(parsed);
-        } else if (e.key === 'henz_stock_transfers_v3') {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setStockTransfers(parsed);
-        } else if (e.key === 'henz_preset_kits_v3') {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) setPresetKits(parsed);
-        }
-      } catch { /* ignore */ }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      if (broadcastChannel) broadcastChannel.close();
+      subscriptions.forEach((unsub) => unsub());
+    };
+  }, [authReady]);
+
+  // Track device connectivity so the header can show online vs. offline (queued) sync.
+  useEffect(() => {
+    const handleOnline = () => setIsCloudOnline(true);
+    const handleOffline = () => setIsCloudOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  const broadcastSync = (type: string, payload: any) => {
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        const channel = new BroadcastChannel('henz_pos_sync_channel');
-        channel.postMessage({ type, payload });
-        channel.close();
-      }
-    } catch { /* ignore */ }
-  };
-
-  // Synchronize to unified localStorage schema and notify other tabs
-  useEffect(() => {
-    localStorage.setItem('henz_products_v3', JSON.stringify(products));
-    broadcastSync('SYNC_PRODUCTS', products);
-  }, [products]);
-
+  // Persist device-local working state only: the selected branch and the open
+  // register tabs, so a reload on this terminal keeps the cashier's place. These
+  // are intentionally NOT synced across branches — each terminal owns its tabs.
   useEffect(() => {
     localStorage.setItem('henz_active_branch_v3', activeBranch);
   }, [activeBranch]);
@@ -463,26 +461,6 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('henz_held_carts_v3', JSON.stringify(heldCarts));
   }, [heldCarts]);
-
-  useEffect(() => {
-    localStorage.setItem('henz_transactions_v3', JSON.stringify(transactions));
-    broadcastSync('SYNC_TRANSACTIONS', transactions);
-  }, [transactions]);
-
-  useEffect(() => {
-    localStorage.setItem('henz_preorders_v3', JSON.stringify(preOrders));
-    broadcastSync('SYNC_PREORDERS', preOrders);
-  }, [preOrders]);
-
-  useEffect(() => {
-    localStorage.setItem('henz_stock_transfers_v3', JSON.stringify(stockTransfers));
-    broadcastSync('SYNC_TRANSFERS', stockTransfers);
-  }, [stockTransfers]);
-
-  useEffect(() => {
-    localStorage.setItem('henz_preset_kits_v3', JSON.stringify(presetKits));
-    broadcastSync('SYNC_KITS', presetKits);
-  }, [presetKits]);
 
   // Unified Database Metadata
   const databaseMeta: UnifiedDatabaseMeta = {
@@ -538,19 +516,19 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const parsed = JSON.parse(jsonString);
       if (parsed && parsed.products && Array.isArray(parsed.products)) {
-        setProducts(parsed.products);
-        if (parsed.transactions && Array.isArray(parsed.transactions)) {
-          setTransactions(parsed.transactions);
-        }
-        if (parsed.preOrders && Array.isArray(parsed.preOrders)) {
-          setPreOrders(parsed.preOrders);
-        }
-        if (parsed.stockTransfers && Array.isArray(parsed.stockTransfers)) {
-          setStockTransfers(parsed.stockTransfers);
-        }
-        if (parsed.presetKits && Array.isArray(parsed.presetKits)) {
-          setPresetKits(parsed.presetKits);
-        }
+        // Write the imported records into Firestore; the onSnapshot listeners
+        // then refresh local state. Fire-and-forget so a large import doesn't
+        // block the UI (writes queue and sync automatically if offline).
+        const writeAll = (colName: string, items: { id: string }[]) => {
+          items.forEach((item) => {
+            if (item && item.id) setDoc(doc(db, colName, item.id), item).catch(() => {});
+          });
+        };
+        writeAll(COLLECTIONS.products, parsed.products);
+        if (Array.isArray(parsed.transactions)) writeAll(COLLECTIONS.transactions, parsed.transactions);
+        if (Array.isArray(parsed.preOrders)) writeAll(COLLECTIONS.preOrders, parsed.preOrders);
+        if (Array.isArray(parsed.stockTransfers)) writeAll(COLLECTIONS.stockTransfers, parsed.stockTransfers);
+        if (Array.isArray(parsed.presetKits)) writeAll(COLLECTIONS.presetKits, parsed.presetKits);
         soundEffects.playSuccessPayment();
         return true;
       }
@@ -562,11 +540,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetDatabaseToDefaults = () => {
-    setProducts(INITIAL_PRODUCTS);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setPreOrders(INITIAL_PREORDERS);
-    setStockTransfers(INITIAL_TRANSFERS);
-    setPresetKits(PRESET_KITS);
+    // Restore the default catalog by writing the seed records to Firestore; the
+    // listeners then repopulate local state on every synced terminal.
+    const writeAll = (colName: string, items: { id: string }[]) => {
+      items.forEach((item) => setDoc(doc(db, colName, item.id), item).catch(() => {}));
+    };
+    writeAll(COLLECTIONS.products, INITIAL_PRODUCTS);
+    writeAll(COLLECTIONS.transactions, INITIAL_TRANSACTIONS);
+    writeAll(COLLECTIONS.preOrders, INITIAL_PREORDERS);
+    writeAll(COLLECTIONS.stockTransfers, INITIAL_TRANSFERS);
+    writeAll(COLLECTIONS.presetKits, PRESET_KITS);
     soundEffects.playQRScanChime();
   };
 
@@ -770,74 +753,6 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return null;
     }
 
-    // Add Customer Pre-Order to the Centralized Database
-  const addCustomerPreOrder = (orderInput: {
-    customerName: string;
-    schoolOrClinic: string;
-    contactNumber: string;
-    email?: string;
-    pickupBranch: BranchName;
-    targetPickupDate: string;
-    items: { productId: string; quantity: number }[];
-    paymentStatus: CustomerPreOrder['paymentStatus'];
-    paymentMethod: CustomerPreOrder['paymentMethod'];
-    paymentRefNumber?: string;
-    notes?: string;
-  }): CustomerPreOrder => {
-    const nextOrderNum = `HNZ-2026-${String(preOrders.length + 101).padStart(4, '0')}`;
-    const orderItemsMapped = orderInput.items.map((i) => {
-      const prod = products.find((p) => p.id === i.productId);
-      return {
-        productId: i.productId,
-        productName: prod ? prod.name : 'Medical Item',
-        barcode: prod ? prod.barcode : '000000000000',
-        quantity: i.quantity,
-        unitPrice: prod ? prod.price : 0,
-        unit: prod ? prod.unit : 'pcs',
-      };
-    });
-
-    const totalAmount = orderItemsMapped.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
-    const totalItems = orderItemsMapped.reduce((acc, item) => acc + item.quantity, 0);
-
-    const newOrder: CustomerPreOrder = {
-      id: `po-${Date.now()}`,
-      orderNumber: nextOrderNum,
-      qrCodeValue: `HENZ-ORDER-${nextOrderNum}`,
-      customerName: orderInput.customerName,
-      schoolOrClinic: orderInput.schoolOrClinic,
-      contactNumber: orderInput.contactNumber,
-      email: orderInput.email,
-      pickupBranch: orderInput.pickupBranch,
-      targetPickupDate: orderInput.targetPickupDate,
-      items: orderItemsMapped,
-      totalItems,
-      totalAmount,
-      paymentStatus: orderInput.paymentStatus,
-      paymentMethod: orderInput.paymentMethod,
-      paymentRefNumber: orderInput.paymentRefNumber,
-      orderStatus: 'Pending',
-      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      notes: orderInput.notes,
-    };
-
-    setPreOrders((prev) => [newOrder, ...prev]);
-    soundEffects.playQRScanChime();
-
-    // ---------------------------------------------------------
-    // WHERE YOU SAVE TO FIRESTORE:
-    // ---------------------------------------------------------
-    try {
-      setDoc(doc(db, 'preOrders', newOrder.id), newOrder).catch((err) => {
-        console.warn('Offline Firestore save:', err);
-      });
-    } catch {
-      // offline fallback
-    }
-
-    return newOrder;
-  };
-
     const subtotal = active.items.reduce((acc, item) => acc + item.subtotal, 0);
     const discount = saleData.discountAmount || 0;
     const grandTotal = Math.max(0, subtotal - discount);
@@ -871,50 +786,34 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'Completed',
     };
 
-    // Deduct stock in appropriate branch inside the unified database
+    // Deduct stock in the active branch. increment() is atomic and race-safe
+    // across terminals (and offline-compatible), so two registers selling the
+    // same item never clobber each other's deduction.
     const isUsa = activeBranch.includes('USA Branch') || activeBranch.includes('San Agustin');
-    setProducts((prev) =>
-      prev.map((prod) => {
-        const soldItem = active.items.find((item) => item.product.id === prod.id);
-        if (!soldItem) return prod;
+    const stockField = isUsa ? 'stockUsaBranch' : 'stockMainBranch';
 
-        if (isUsa) {
-          return {
-            ...prod,
-            stockUsaBranch: Math.max(0, prod.stockUsaBranch - soldItem.quantity),
-          };
-        } else {
-          return {
-            ...prod,
-            stockMainBranch: Math.max(0, prod.stockMainBranch - soldItem.quantity),
-          };
-        }
-      })
-    );
-
-    // If this cart came from a Pre-Order, mark it as Claimed in the central database
+    // Commit the whole sale atomically to Firestore: the transaction record,
+    // every per-item stock deduction, and (if this cart came from a pre-order)
+    // the "Claimed" flag all land together or not at all. The onSnapshot
+    // listeners then update products/transactions/preOrders locally.
+    const batch = writeBatch(db);
+    batch.set(doc(db, COLLECTIONS.transactions, newTransaction.id), newTransaction);
+    active.items.forEach((item) => {
+      batch.update(doc(db, COLLECTIONS.products, item.product.id), {
+        [stockField]: increment(-item.quantity),
+      });
+    });
     if (active.sourcePreOrderId) {
-      setPreOrders((prev) =>
-        prev.map((po) =>
-          po.id === active.sourcePreOrderId ? { ...po, orderStatus: 'Claimed' } : po
-        )
-      );
-      try {
-        updateDoc(doc(db, 'preOrders', active.sourcePreOrderId), {
-          orderStatus: 'Claimed',
-        }).catch(() => {});
-      } catch {
-        // offline fallback
-      }
+      batch.update(doc(db, COLLECTIONS.preOrders, active.sourcePreOrderId), {
+        orderStatus: 'Claimed',
+      });
     }
+    batch.commit().catch((err) => console.warn('Sale queued offline, will sync:', err));
 
-    // Save transaction to centralized table
-    setTransactions((prev) => [newTransaction, ...prev]);
     setRecentCompletedSale(newTransaction);
-
     soundEffects.playSuccessPayment();
 
-    // Close or clear the active cart
+    // Close the device-local cart tab (heldCarts is per-terminal working state)
     closeCart(active.id);
 
     return newTransaction;
@@ -971,13 +870,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: orderInput.notes,
     };
 
-    setPreOrders((prev) => [newOrder, ...prev]);
     soundEffects.playQRScanChime();
 
-    // Push new order to Firebase Cloud Firestore
+    // Write to Firestore; the onSnapshot listener adds it to local state (and
+    // chimes on the staff terminal). Works offline — the write queues and syncs.
     try {
-      setDoc(doc(db, 'preOrders', newOrder.id), newOrder).catch((err) => {
-        console.warn('Offline Firestore save:', err);
+      setDoc(doc(db, COLLECTIONS.preOrders, newOrder.id), newOrder).catch((err) => {
+        console.warn('Pre-order queued offline, will sync:', err);
       });
     } catch {
       // offline fallback
@@ -987,26 +886,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updatePreOrderStatus = (orderId: string, status: PreOrderStatus, packedItemIds?: string[]) => {
-    setPreOrders((prev) =>
-      prev.map((po) => {
-        if (po.id === orderId) {
-          return {
-            ...po,
-            orderStatus: status,
-            packedItemIds: packedItemIds || po.packedItemIds,
-          };
-        }
-        return po;
-      })
-    );
-
-    // Push status update to Firebase Cloud Firestore
+    // Write to Firestore; the onSnapshot listener reflects it into local state.
     try {
-      updateDoc(doc(db, 'preorders', orderId), {
+      updateDoc(doc(db, COLLECTIONS.preOrders, orderId), {
         orderStatus: status,
         ...(packedItemIds ? { packedItemIds } : {}),
       }).catch((err) => {
-        console.warn('Offline Firestore status update:', err);
+        console.warn('Status update queued offline, will sync:', err);
       });
     } catch {
       // offline fallback
@@ -1026,34 +912,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetProd = products.find((p) => p.id === productId);
     if (!targetProd) return;
 
-    let actualTransfer = 0;
     const fromBranchName = from === 'main' ? BRANCH_MAIN : BRANCH_USA;
     const toBranchName = to === 'main' ? BRANCH_MAIN : BRANCH_USA;
-
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id !== productId) return p;
-        const mainStock = p.stockMainBranch;
-        const usaStock = p.stockUsaBranch;
-
-        if (from === 'usa' && to === 'main') {
-          actualTransfer = Math.min(usaStock, quantity);
-          return {
-            ...p,
-            stockUsaBranch: usaStock - actualTransfer,
-            stockMainBranch: mainStock + actualTransfer,
-          };
-        } else if (from === 'main' && to === 'usa') {
-          actualTransfer = Math.min(mainStock, quantity);
-          return {
-            ...p,
-            stockMainBranch: mainStock - actualTransfer,
-            stockUsaBranch: usaStock + actualTransfer,
-          };
-        }
-        return p;
-      })
-    );
 
     // Record in central transfer audit log
     const transferRecord: StockTransferRecord = {
@@ -1070,7 +930,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes,
     };
 
-    setStockTransfers((prev) => [transferRecord, ...prev]);
+    // Move the quantity between branches and log the transfer atomically. The
+    // Inventory UI bounds `quantity` to available stock, so increment() is safe.
+    const batch = writeBatch(db);
+    batch.update(doc(db, COLLECTIONS.products, productId), {
+      stockMainBranch: increment(from === 'main' ? -quantity : quantity),
+      stockUsaBranch: increment(from === 'usa' ? -quantity : quantity),
+    });
+    batch.set(doc(db, COLLECTIONS.stockTransfers, transferRecord.id), transferRecord);
+    batch.commit().catch((err) => console.warn('Transfer queued offline, will sync:', err));
+
     soundEffects.playQRScanChime();
   };
 
@@ -1082,27 +951,23 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     batchNumber?: string,
     expiryDate?: string
   ) => {
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id !== productId) return p;
-        const currentMain = p.stockMainBranch;
-        const currentUsa = p.stockUsaBranch;
-
-        return {
-          ...p,
-          stockMainBranch: target === 'main' ? currentMain + quantity : currentMain,
-          stockUsaBranch: target === 'usa' ? currentUsa + quantity : currentUsa,
-          batchNumber: batchNumber || p.batchNumber,
-          expiryDate: expiryDate || p.expiryDate,
-        };
-      })
-    );
+    try {
+      updateDoc(doc(db, COLLECTIONS.products, productId), {
+        [target === 'main' ? 'stockMainBranch' : 'stockUsaBranch']: increment(quantity),
+        ...(batchNumber ? { batchNumber } : {}),
+        ...(expiryDate ? { expiryDate } : {}),
+      }).catch((err) => console.warn('Restock queued offline, will sync:', err));
+    } catch {
+      // offline fallback
+    }
     soundEffects.playQRScanChime();
   };
 
   // CRUD: Update Product
   const updateProduct = (product: Product) => {
-    setProducts((prev) => prev.map((p) => (p.id === product.id ? product : p)));
+    setDoc(doc(db, COLLECTIONS.products, product.id), product).catch((err) =>
+      console.warn('Product update queued offline, will sync:', err)
+    );
   };
 
   // CRUD: Add Product
@@ -1111,12 +976,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...productData,
       id: `prod-${Date.now()}`,
     };
-    setProducts((prev) => [newProd, ...prev]);
+    setDoc(doc(db, COLLECTIONS.products, newProd.id), newProd).catch((err) =>
+      console.warn('New product queued offline, will sync:', err)
+    );
   };
 
   // CRUD: Delete Product
   const deleteProduct = (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    deleteDoc(doc(db, COLLECTIONS.products, productId)).catch((err) =>
+      console.warn('Product delete queued offline, will sync:', err)
+    );
   };
 
   // CRUD: Add Preset Starter Kit
@@ -1127,26 +996,34 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isCustom: true,
       createdAt: new Date().toLocaleDateString(),
     };
-    setPresetKits((prev) => [newKit, ...prev]);
+    setDoc(doc(db, COLLECTIONS.presetKits, newKit.id), newKit).catch((err) =>
+      console.warn('Preset kit queued offline, will sync:', err)
+    );
     soundEffects.playQRScanChime();
     return newKit;
   };
 
   // CRUD: Update Preset Starter Kit
   const updatePresetKit = (updatedKit: PresetKit) => {
-    setPresetKits((prev) => prev.map((k) => (k.id === updatedKit.id ? updatedKit : k)));
+    setDoc(doc(db, COLLECTIONS.presetKits, updatedKit.id), updatedKit).catch((err) =>
+      console.warn('Preset kit update queued offline, will sync:', err)
+    );
     soundEffects.playQRScanChime();
   };
 
   // CRUD: Delete Preset Starter Kit
   const deletePresetKit = (kitId: string) => {
-    setPresetKits((prev) => prev.filter((k) => k.id !== kitId));
+    deleteDoc(doc(db, COLLECTIONS.presetKits, kitId)).catch((err) =>
+      console.warn('Preset kit delete queued offline, will sync:', err)
+    );
     soundEffects.playScanBeep();
   };
 
   // Reset Preset Starter Kits to default clinical catalog
   const resetPresetKitsToDefaults = () => {
-    setPresetKits(PRESET_KITS);
+    PRESET_KITS.forEach((kit) => {
+      setDoc(doc(db, COLLECTIONS.presetKits, kit.id), kit).catch(() => {});
+    });
     soundEffects.playQRScanChime();
   };
 
@@ -1196,6 +1073,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateProduct,
         addProduct,
         deleteProduct,
+        isCloudOnline,
+        isSyncing,
         databaseMeta,
         exportDatabaseJSON,
         importDatabaseJSON,

@@ -6,7 +6,7 @@ export const PRESET_KITS: PresetKit[] = [
     name: 'Complete Phlebotomy Kit for Medical Laboratory Science (MLS / BSMT)',
     targetAudience: 'Medical Technology / Medical Laboratory Science Students & Phlebotomists',
     category: 'Student Clinical Kits',
-    description: 'Featured on HENZ Facebook: Complete blood extraction bundle with EDTA, Clot & Citrate vacuum tubes, butterfly needles, multi-sample holder, tourniquet, lancets, alcohol swabs, micropore, and biohazard sharps box.',
+    description: 'Complete blood extraction bundle with EDTA, Clot & Citrate vacuum tubes, butterfly needles, multi-sample holder, tourniquet, lancets, alcohol swabs, micropore, and biohazard sharps box.',
     discountPercentage: 12,
     items: [
       { productId: 'prod-068', quantity: 1 }, // Vacutainer EDTA Lavender Box 100s
@@ -46,7 +46,7 @@ export const PRESET_KITS: PresetKit[] = [
     name: 'Medical Footwear & Protective Duty Bundle',
     targetAudience: 'Hospital Rotations, Operating Room, & Clinical Duty Interns',
     category: 'Student Clinical Kits',
-    description: 'Facebook featured anti-slip autoclavable medical duty slip-on clogs, non-skid shoe covers, bouffant scrub caps, N95 respirator, and diagnostic penlight.',
+    description: 'Anti-slip autoclavable medical duty slip-on clogs, non-skid shoe covers, bouffant scrub caps, N95 respirator, and diagnostic penlight.',
     discountPercentage: 10,
     items: [
       { productId: 'prod-086', quantity: 1 }, // Medical Anti-Slip Duty Shoes White

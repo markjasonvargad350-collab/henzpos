@@ -36,9 +36,9 @@ export const QRCodeRenderer: React.FC<QRCodeRendererProps> = ({
   }, [value, size]);
 
   return (
-    <div className={`inline-flex flex-col items-center justify-center p-2.5 bg-[#0d1117] rounded-xl shadow-sm border border-[#30363d] ${className}`}>
+    <div className={`inline-flex flex-col items-center justify-center p-2.5 bg-slate-50 rounded-xl shadow-sm border border-slate-200 ${className}`}>
       <canvas ref={canvasRef} className="rounded-lg p-1 bg-white" />
-      <span className="mt-1.5 text-[11px] font-mono font-medium text-gray-400 tracking-wider">
+      <span className="mt-1.5 text-[11px] font-mono font-medium text-slate-500 tracking-wider">
         {value}
       </span>
     </div>

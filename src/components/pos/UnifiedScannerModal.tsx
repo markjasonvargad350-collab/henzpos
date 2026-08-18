@@ -66,10 +66,11 @@ export const UnifiedScannerModal: React.FC<UnifiedScannerModalProps> = ({ isOpen
     const code = scannedCode.trim();
     if (!code) return;
 
-    // Check if it's a pre-order reference (starts with HENZ-PRE- or matches preOrder list)
+    // Check if it's a pre-order reference (scanned QR value, order number, or internal id)
     const matchingPreOrder = preOrders.find(
       (po) =>
-        po.referenceCode.toLowerCase() === code.toLowerCase() ||
+        (po.qrCodeValue || '').toLowerCase() === code.toLowerCase() ||
+        (po.orderNumber || '').toLowerCase() === code.toLowerCase() ||
         po.id.toLowerCase() === code.toLowerCase()
     );
 
@@ -79,7 +80,7 @@ export const UnifiedScannerModal: React.FC<UnifiedScannerModalProps> = ({ isOpen
         soundEffects.playSuccessPayment();
         setScanFeedback({
           type: 'preorder',
-          message: `Pre-Order #${matchingPreOrder.referenceCode} for ${matchingPreOrder.customerName} loaded into cart!`,
+          message: `Pre-Order #${matchingPreOrder.orderNumber} for ${matchingPreOrder.customerName} loaded into cart!`,
         });
         setTimeout(() => {
           onClose();
@@ -241,10 +242,10 @@ export const UnifiedScannerModal: React.FC<UnifiedScannerModalProps> = ({ isOpen
                 <button
                   key={po.id}
                   type="button"
-                  onClick={() => handleProcessCode(po.referenceCode)}
+                  onClick={() => handleProcessCode(po.qrCodeValue)}
                   className="text-[10px] bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded text-blue-700 font-medium transition cursor-pointer"
                 >
-                  QR #{po.referenceCode}
+                  QR #{po.orderNumber}
                 </button>
               ))}
             </div>

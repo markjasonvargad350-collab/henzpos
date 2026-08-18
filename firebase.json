@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "database": "ai-studio-henzhealthcarepo-58055212-be8b-4d31-80f9-5d441176d034",
+    "rules": "firestore.rules"
+  }
+}

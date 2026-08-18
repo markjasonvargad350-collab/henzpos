@@ -223,9 +223,9 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
       id="preset-kit-modal"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto"
     >
-      <div className="bg-[#161b22] rounded-2xl shadow-2xl border border-[#30363d] w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-[#c9d1d9]">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-slate-800">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-950 via-[#1c232d] to-teal-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-[#30363d]">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 sm:p-5 flex items-center justify-between border-b border-emerald-700">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300">
               <Layers className="w-5 h-5" />
@@ -235,11 +235,11 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                 <h2 className="text-lg font-bold tracking-tight text-white">
                   {presetToEdit ? 'Edit Starter Checklist Preset' : 'Create Starter Checklist Preset'}
                 </h2>
-                <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-100 border border-emerald-400/40 px-2 py-0.5 rounded-full">
                   1-Click Student Bundle
                 </span>
               </div>
-              <p className="text-xs text-emerald-300/90 mt-0.5">
+              <p className="text-xs text-emerald-50/90 mt-0.5">
                 Configure auto-fill presets for nursing, medtech, pharmacy, or clinic supply packages
               </p>
             </div>
@@ -247,7 +247,7 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+            className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
             title="Close"
           >
             <X className="w-5 h-5" />
@@ -257,51 +257,51 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
         {/* Body Content */}
         <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {errorNotice && (
-            <div className="p-3 bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs rounded-xl flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <div className="p-3 bg-rose-50 border border-rose-300 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
               <span>{errorNotice}</span>
             </div>
           )}
 
           {/* Kit Details Form */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[#0d1117] p-4 rounded-xl border border-[#30363d]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Preset Kit Name <span className="text-emerald-400">*</span>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Preset Kit Name <span className="text-emerald-600">*</span>
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. BSN 2nd Year Duty Kit, Dental Hygiene Pack..."
-                  className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Target Course / Audience <span className="text-emerald-400">*</span>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Target Course / Audience <span className="text-emerald-600">*</span>
                 </label>
                 <input
                   type="text"
                   value={targetAudience}
                   onChange={(e) => setTargetAudience(e.target.value)}
                   placeholder="e.g. BSN 2nd Year / MedTech Interns / School Clinics"
-                  className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Category
                 </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
                 >
                   {kitCategories.map((c) => (
                     <option key={c} value={c}>
@@ -314,7 +314,7 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Kit Description & Purpose
                 </label>
                 <textarea
@@ -322,14 +322,14 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
                   placeholder="Brief notes on what items this kit includes, special packing instructions, or student guidelines..."
-                  className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 resize-none"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 resize-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
                   <span>Kit Bundle Discount (%)</span>
-                  <span className="text-emerald-400 font-bold">{discountPercentage}%</span>
+                  <span className="text-emerald-600 font-bold">{discountPercentage}%</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -341,11 +341,11 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                     onChange={(e) => setDiscountPercentage(Number(e.target.value))}
                     className="flex-1 accent-emerald-500 cursor-pointer"
                   />
-                  <span className="text-xs font-mono font-bold bg-[#161b22] border border-[#30363d] px-2 py-1 rounded text-white min-w-[50px] text-center">
+                  <span className="text-xs font-mono font-bold bg-white border border-slate-200 px-2 py-1 rounded text-slate-900 min-w-[50px] text-center">
                     {discountPercentage}%
                   </span>
                 </div>
-                <span className="text-[11px] text-gray-400 mt-1 block">
+                <span className="text-[11px] text-slate-500 mt-1 block">
                   Students applying this preset will get this bundle incentive automatically.
                 </span>
               </div>
@@ -353,26 +353,26 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
           </div>
 
           {/* Selected Kit Items Summary Card */}
-          <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d] space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#30363d] pb-2">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
               <div className="flex items-center gap-2">
-                <Package className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                <Package className="w-4 h-4 text-emerald-600" />
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                   Bundled Medical Items ({selectedEntries.length} items • {totalItemCount} total units)
                 </h3>
               </div>
               <div className="flex items-center gap-3 text-xs">
-                <span className="text-gray-400">
+                <span className="text-slate-500">
                   Total Value: <span className="line-through">₱{rawSubtotal.toLocaleString()}</span>
                 </span>
-                <span className="font-bold text-emerald-400 text-sm">
+                <span className="font-bold text-emerald-600 text-sm">
                   Bundle Price: ₱{bundleTotal.toLocaleString()}
                 </span>
               </div>
             </div>
 
             {selectedEntries.length === 0 ? (
-              <div className="text-center py-6 text-gray-400 text-xs border border-dashed border-[#30363d] rounded-lg">
+              <div className="text-center py-6 text-slate-500 text-xs border border-dashed border-slate-200 rounded-lg">
                 No items selected yet. Use the catalog browser below to search and add items to this preset kit.
               </div>
             ) : (
@@ -384,11 +384,11 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                   return (
                     <div
                       key={prodId}
-                      className="p-2 bg-[#161b22] rounded-lg border border-[#30363d] flex items-center justify-between gap-2 text-xs"
+                      className="p-2 bg-white rounded-lg border border-slate-200 flex items-center justify-between gap-2 text-xs"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-white truncate text-[11px]">{prod.name}</p>
-                        <p className="text-[10px] text-gray-400">
+                        <p className="font-semibold text-slate-900 truncate text-[11px]">{prod.name}</p>
+                        <p className="text-[10px] text-slate-500">
                           ₱{prod.price} / {prod.unit} • Sub: ₱{(prod.price * qty).toLocaleString()}
                         </p>
                       </div>
@@ -397,7 +397,7 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                         <button
                           type="button"
                           onClick={() => updateQuantity(prodId, -1)}
-                          className="w-6 h-6 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-300 flex items-center justify-center font-bold"
+                          className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
@@ -407,19 +407,19 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                           max="999"
                           value={qty}
                           onChange={(e) => setExactQuantity(prodId, parseInt(e.target.value) || 1)}
-                          className="w-10 text-center font-mono font-bold bg-[#0d1117] border border-[#30363d] rounded text-white text-xs py-0.5"
+                          className="w-10 text-center font-mono font-bold bg-slate-50 border border-slate-200 rounded text-slate-900 text-xs py-0.5"
                         />
                         <button
                           type="button"
                           onClick={() => updateQuantity(prodId, 1)}
-                          className="w-6 h-6 rounded bg-[#21262d] hover:bg-[#30363d] text-gray-300 flex items-center justify-center font-bold"
+                          className="w-6 h-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold"
                         >
                           <Plus className="w-3 h-3" />
                         </button>
                         <button
                           type="button"
                           onClick={() => toggleProduct(prodId)}
-                          className="p-1 text-gray-500 hover:text-rose-400 transition ml-1"
+                          className="p-1 text-slate-500 hover:text-rose-500 transition ml-1"
                           title="Remove item from kit"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -433,32 +433,32 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
           </div>
 
           {/* Medical Catalog Picker */}
-          <div className="bg-[#0d1117] p-4 rounded-xl border border-[#30363d] space-y-3">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <div>
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                   Browse & Add Supplies from Live 60+ Medical Catalog
                 </h3>
-                <p className="text-[11px] text-gray-400">
+                <p className="text-[11px] text-slate-500">
                   Search medical supplies to add into this Starter Preset.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <div className="relative flex-1 sm:w-56">
-                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
                   <input
                     type="text"
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
                     placeholder="Search medical item, SKU..."
-                    className="w-full bg-[#161b22] border border-[#30363d] rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <select
                   value={selectedProductCategory}
                   onChange={(e) => setSelectedProductCategory(e.target.value)}
-                  className="bg-[#161b22] border border-[#30363d] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 max-w-[140px]"
+                  className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 max-w-[140px]"
                 >
                   {productCategories.map((cat) => (
                     <option key={cat} value={cat}>
@@ -480,43 +480,43 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                     key={prod.id}
                     className={`p-2.5 rounded-lg border transition text-xs flex flex-col justify-between ${
                       isSelected
-                        ? 'border-emerald-500/80 bg-emerald-950/30'
-                        : 'border-[#30363d] bg-[#161b22] hover:border-gray-500'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-1">
-                        <span className="font-semibold text-white text-[11px] line-clamp-1">
+                        <span className="font-semibold text-slate-900 text-[11px] line-clamp-1">
                           {prod.name}
                         </span>
-                        <span className="font-mono text-emerald-400 font-bold text-[11px] shrink-0">
+                        <span className="font-mono text-emerald-600 font-bold text-[11px] shrink-0">
                           ₱{prod.price}
                         </span>
                       </div>
-                      <p className="text-[10px] text-gray-400 line-clamp-1 mt-0.5">
+                      <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">
                         {prod.category} • {prod.unit}
                       </p>
                     </div>
 
-                    <div className="mt-2 pt-2 border-t border-[#30363d]/60 flex items-center justify-between">
-                      <span className="text-[10px] text-gray-500">SKU: {prod.sku}</span>
+                    <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500">SKU: {prod.sku}</span>
 
                       {isSelected ? (
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => updateQuantity(prod.id, -1)}
-                            className="w-5 h-5 rounded bg-[#21262d] text-gray-300 hover:text-white flex items-center justify-center font-bold text-xs"
+                            className="w-5 h-5 rounded bg-slate-100 text-slate-700 hover:text-slate-900 flex items-center justify-center font-bold text-xs"
                           >
                             -
                           </button>
-                          <span className="font-mono font-bold text-emerald-400 text-xs px-1.5">
+                          <span className="font-mono font-bold text-emerald-600 text-xs px-1.5">
                             {qty}
                           </span>
                           <button
                             type="button"
                             onClick={() => updateQuantity(prod.id, 1)}
-                            className="w-5 h-5 rounded bg-[#21262d] text-gray-300 hover:text-white flex items-center justify-center font-bold text-xs"
+                            className="w-5 h-5 rounded bg-slate-100 text-slate-700 hover:text-slate-900 flex items-center justify-center font-bold text-xs"
                           >
                             +
                           </button>
@@ -525,7 +525,7 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
                         <button
                           type="button"
                           onClick={() => toggleProduct(prod.id)}
-                          className="px-2 py-1 rounded bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/50 text-emerald-300 hover:text-white text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                          className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
                           <span>Add to Kit</span>
@@ -540,14 +540,14 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
         </form>
 
         {/* Footer Actions */}
-        <div className="bg-[#0d1117] p-4 border-t border-[#30363d] flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-gray-400">
+        <div className="bg-slate-50 p-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-slate-500">
             {selectedEntries.length > 0 ? (
               <span>
-                Ready to save <strong className="text-white">{selectedEntries.length} items</strong> into "{name || 'Preset Kit'}"
+                Ready to save <strong className="text-slate-900">{selectedEntries.length} items</strong> into "{name || 'Preset Kit'}"
               </span>
             ) : (
-              <span className="text-amber-400">Select items to enable saving</span>
+              <span className="text-amber-600">Select items to enable saving</span>
             )}
           </div>
 
@@ -555,7 +555,7 @@ export const PresetKitModal: React.FC<PresetKitModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-300 hover:text-white hover:bg-[#21262d] border border-[#30363d] transition cursor-pointer"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 transition cursor-pointer"
             >
               Cancel
             </button>

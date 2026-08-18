@@ -19,7 +19,7 @@ export const PendingPreOrdersDrawer: React.FC<PendingPreOrdersDrawerProps> = ({ 
   const filteredOrders = preOrders.filter((order) => {
     const matchesSearch =
       order.customerName.toLowerCase().includes(filterQuery.toLowerCase()) ||
-      order.referenceCode.toLowerCase().includes(filterQuery.toLowerCase()) ||
+      order.orderNumber.toLowerCase().includes(filterQuery.toLowerCase()) ||
       order.schoolOrClinic.toLowerCase().includes(filterQuery.toLowerCase()) ||
       order.contactNumber.includes(filterQuery);
 
@@ -131,7 +131,7 @@ export const PendingPreOrdersDrawer: React.FC<PendingPreOrdersDrawerProps> = ({ 
                         <Building className="w-3 h-3 text-slate-400" />
                         <span>{order.schoolOrClinic}</span>
                         <span>•</span>
-                        <span className="font-mono text-emerald-600 font-bold">#{order.referenceCode}</span>
+                        <span className="font-mono text-emerald-600 font-bold">#{order.orderNumber}</span>
                       </p>
                     </div>
 
@@ -141,12 +141,12 @@ export const PendingPreOrdersDrawer: React.FC<PendingPreOrdersDrawerProps> = ({ 
                       </span>
                       <span
                         className={`text-[10px] font-semibold ${
-                          order.paymentStatus === 'Paid'
+                          order.paymentStatus !== 'Unpaid (Pay Later at Store)'
                             ? 'text-emerald-600'
                             : 'text-amber-600'
                         }`}
                       >
-                        {order.paymentStatus === 'Paid' ? 'Paid in advance' : 'Pay at Counter'}
+                        {order.paymentStatus !== 'Unpaid (Pay Later at Store)' ? 'Paid in advance' : 'Pay at Counter'}
                       </span>
                     </div>
                   </div>
