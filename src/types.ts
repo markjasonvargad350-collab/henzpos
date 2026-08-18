@@ -119,7 +119,7 @@ export type PreOrderPaymentStatus = 'Unpaid (Pay Later at Store)' | 'Paid via GC
 
 export interface CustomerPreOrder {
   id: string;
-  orderNumber: string; // e.g., "HNZ-2026-0814"
+  orderNumber: string; // date-stamped + random, e.g. "HNZ-20260818-7K2F"
   qrCodeValue: string;
   customerName: string;
   schoolOrClinic: string;

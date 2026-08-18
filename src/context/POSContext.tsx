@@ -833,7 +833,23 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentRefNumber?: string;
     notes?: string;
   }): CustomerPreOrder => {
-    const nextOrderNum = `HNZ-2026-${String(preOrders.length + 101).padStart(4, '0')}`;
+    // Human-facing order number: date-stamped plus a short, unambiguous random
+    // code. Generated fully client-side so it works OFFLINE, and RANDOM rather
+    // than a running count (`preOrders.length + …`) — otherwise two customers
+    // ordering at the same moment on different devices compute the same count
+    // and collide on the same number. The alphabet omits easily-confused
+    // characters (0/O, 1/I/L) so the code is safe to read aloud and type into
+    // the tracker. The loop regenerates on the rare clash with a known order.
+    const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const randomCode = (len: number) =>
+      Array.from({ length: len }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
+    const now = new Date();
+    const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const existingNumbers = new Set(preOrders.map((o) => o.orderNumber));
+    let nextOrderNum = `HNZ-${datePart}-${randomCode(4)}`;
+    for (let i = 0; i < 10 && existingNumbers.has(nextOrderNum); i++) {
+      nextOrderNum = `HNZ-${datePart}-${randomCode(4)}`;
+    }
     const orderItemsMapped = orderInput.items.map((i) => {
       const prod = products.find((p) => p.id === i.productId);
       return {
@@ -850,7 +866,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const totalItems = orderItemsMapped.reduce((acc, item) => acc + item.quantity, 0);
 
     const newOrder: CustomerPreOrder = {
-      id: `po-${Date.now()}`,
+      // Random suffix on top of the timestamp so two orders created in the same
+      // millisecond on different devices get distinct document IDs — otherwise
+      // the second setDoc would silently overwrite (lose) the first.
+      id: `po-${Date.now()}-${randomCode(4)}`,
       orderNumber: nextOrderNum,
       qrCodeValue: `HENZ-ORDER-${nextOrderNum}`,
       customerName: orderInput.customerName,
