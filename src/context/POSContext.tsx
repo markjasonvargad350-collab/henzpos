@@ -873,13 +873,15 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     soundEffects.playQRScanChime();
 
     // Write to Firestore; the onSnapshot listener adds it to local state (and
-    // chimes on the staff terminal). Works offline — the write queues and syncs.
+    // chimes on the staff terminal). A genuinely offline write does NOT reject —
+    // it queues and syncs later — so a rejection/throw here is a real failure
+    // (auth, rules, or invalid data) that must be surfaced, not swallowed.
     try {
       setDoc(doc(db, COLLECTIONS.preOrders, newOrder.id), newOrder).catch((err) => {
-        console.warn('Pre-order queued offline, will sync:', err);
+        console.error('Pre-order write REJECTED (check auth / rules / data):', err);
       });
-    } catch {
-      // offline fallback
+    } catch (err) {
+      console.error('Pre-order write threw synchronously (invalid data):', err);
     }
 
     return newOrder;

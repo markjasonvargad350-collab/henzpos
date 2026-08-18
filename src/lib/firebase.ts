@@ -36,6 +36,10 @@ try {
     app,
     {
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      // Drop `undefined` optional fields (e.g. a pre-order with no email/notes)
+      // instead of throwing "Unsupported field value: undefined" — otherwise the
+      // write is rejected and silently lost, so the order never syncs to staff.
+      ignoreUndefinedProperties: true,
     },
     databaseId
   );
