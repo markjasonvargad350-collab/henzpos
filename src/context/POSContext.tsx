@@ -328,7 +328,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       // 1. Live Pre-Orders Listener
-      const preOrdersRef = collection(db, 'preorders');
+      const preOrdersRef = collection(db, 'preOrders');
       unsubPreorders = onSnapshot(
         preOrdersRef,
         (snapshot) => {
@@ -360,7 +360,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } else {
             // Seed initial preorders to Firestore if newly provisioned
             INITIAL_PREORDERS.forEach((po) => {
-              setDoc(doc(db, 'preorders', po.id), po).catch(() => {});
+              setDoc(doc(db, 'preOrders', po.id), po).catch(() => {});
             });
           }
           
@@ -828,7 +828,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // WHERE YOU SAVE TO FIRESTORE:
     // ---------------------------------------------------------
     try {
-      setDoc(doc(db, 'preorders', newOrder.id), newOrder).catch((err) => {
+      setDoc(doc(db, 'preOrders', newOrder.id), newOrder).catch((err) => {
         console.warn('Offline Firestore save:', err);
       });
     } catch {
@@ -900,7 +900,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
       );
       try {
-        updateDoc(doc(db, 'preorders', active.sourcePreOrderId), {
+        updateDoc(doc(db, 'preOrders', active.sourcePreOrderId), {
           orderStatus: 'Claimed',
         }).catch(() => {});
       } catch {
@@ -976,7 +976,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Push new order to Firebase Cloud Firestore
     try {
-      setDoc(doc(db, 'preorders', newOrder.id), newOrder).catch((err) => {
+      setDoc(doc(db, 'preOrders', newOrder.id), newOrder).catch((err) => {
         console.warn('Offline Firestore save:', err);
       });
     } catch {
