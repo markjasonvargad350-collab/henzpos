@@ -22,7 +22,7 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["vite/client"]   // 👈 Added this line
+    "types": ["vite/client", "vite-plugin-pwa/react"]   // 👈 Added this line
   },
   "include": ["src", "env.d.ts"] // 👈 Added this line
 }

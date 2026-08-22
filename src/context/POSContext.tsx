@@ -10,6 +10,7 @@ import {
   StockTransferRecord,
   UnifiedDatabaseMeta,
   PresetKit,
+  SyncFailure,
 } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { INITIAL_PREORDERS } from '../data/initialPreOrders';
@@ -17,6 +18,7 @@ import { INITIAL_TRANSACTIONS } from '../data/initialTransactions';
 import { INITIAL_TRANSFERS } from '../data/initialTransfers';
 import { PRESET_KITS } from '../data/presetKits';
 import { soundEffects } from '../utils/audio';
+import { dateStamp, newDocId, randomCode, uniqueSerial } from '../utils/ids';
 import { db, auth, STAFF_EMAIL, testFirestoreConnection } from '../lib/firebase';
 import {
   collection,
@@ -51,6 +53,20 @@ export const COLLECTIONS = {
   presetKits: 'preset_kits',
 } as const;
 
+/**
+ * Outcome of a staff sign-in attempt.
+ *
+ * A boolean is not enough: `signInWithEmailAndPassword` needs the network, so a
+ * register that is offline fails exactly the same way a wrong password does.
+ * Reporting that as "incorrect password" sends the cashier hunting for a
+ * password that was never wrong, so the reason is carried out to the UI.
+ */
+export interface StaffLoginResult {
+  ok: boolean;
+  /** Ready-to-display explanation. Present whenever `ok` is false. */
+  message?: string;
+}
+
 interface POSContextType {
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
@@ -61,7 +77,7 @@ interface POSContextType {
   setIsShareModalOpen: (open: boolean) => void;
   isDatabaseModalOpen: boolean;
   setIsDatabaseModalOpen: (open: boolean) => void;
-  loginAdmin: (password: string) => Promise<boolean>;
+  loginAdmin: (password: string) => Promise<StaffLoginResult>;
   logoutAdmin: () => void;
   products: Product[];
   presetKits: PresetKit[];
@@ -131,6 +147,9 @@ interface POSContextType {
   deleteProduct: (productId: string) => void;
   isCloudOnline: boolean;
   isSyncing: boolean;
+  pendingWriteCount: number;
+  syncFailures: SyncFailure[];
+  dismissSyncFailure: (id: string) => void;
   databaseMeta: UnifiedDatabaseMeta;
   exportDatabaseJSON: () => void;
   importDatabaseJSON: (jsonString: string) => boolean;
@@ -187,13 +206,64 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Sign in as staff using the shared account. onAuthStateChanged then flips
   // isAdminAuthenticated and switches into the POS workspace.
-  const loginAdmin = async (password: string): Promise<boolean> => {
+  //
+  // This call ALWAYS needs the network — Firebase Auth has no offline password
+  // check. An already-signed-in register keeps working offline (the session is
+  // restored from IndexedDB), but a fresh sign-in cannot happen without a
+  // connection, so that case is reported as its own failure rather than as a
+  // bad password.
+  const loginAdmin = async (password: string): Promise<StaffLoginResult> => {
     try {
       await signInWithEmailAndPassword(auth, STAFF_EMAIL, password.trim());
-      return true;
+      return { ok: true };
     } catch (err) {
-      console.warn('Staff login failed:', err);
-      return false;
+      const code = (err as { code?: string } | null)?.code || '';
+      console.warn(`Staff login failed (${code || 'unknown'}):`, err);
+
+      switch (code) {
+        case 'auth/network-request-failed':
+        case 'auth/timeout':
+          return {
+            ok: false,
+            message:
+              'No internet connection, so the password could not be checked. Sign-in needs a connection even though the register itself works offline. Reconnect and try again — a register that was already signed in stays signed in.',
+          };
+        case 'auth/too-many-requests':
+          return {
+            ok: false,
+            message:
+              'Too many failed attempts, so sign-in is temporarily blocked on this device. Wait a few minutes, then try again with the correct password.',
+          };
+        case 'auth/user-disabled':
+          return {
+            ok: false,
+            message:
+              'The shared staff account has been disabled. Ask the store owner to re-enable it in the Firebase console.',
+          };
+        case 'auth/operation-not-allowed':
+        case 'auth/invalid-email':
+        case 'auth/configuration-not-found':
+          return {
+            ok: false,
+            message: `Staff sign-in is not set up correctly on the server (${code}). Tell the store owner — no password will work until it is fixed.`,
+          };
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+        case 'auth/invalid-login-credentials':
+        case 'auth/user-not-found':
+          return {
+            ok: false,
+            message:
+              'Incorrect staff password. Please check with the store owner and try again.',
+          };
+        default:
+          return {
+            ok: false,
+            message: `Sign-in failed${
+              code ? ` (${code})` : ''
+            }. Check the password, then tell the store owner if it keeps happening.`,
+          };
+      }
     }
   };
 
@@ -258,11 +328,38 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activePreOrderModal, setActivePreOrderModal] = useState<CustomerPreOrder | null>(null);
 
   // Cloud sync status — drives the header online/offline + "syncing" indicator.
+  // Seeded from navigator.onLine only as a first guess; the Firestore listeners
+  // take over with the real answer (see markSyncState) as soon as they report.
   const [isCloudOnline, setIsCloudOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  // How many documents currently hold local changes the server hasn't accepted.
+  const [pendingWriteCount, setPendingWriteCount] = useState<number>(0);
   const pendingWritesRef = useRef<Record<string, boolean>>({});
+  const pendingCountsRef = useRef<Record<string, number>>({});
+  const fromCacheRef = useRef<Record<string, boolean>>({});
+
+  // Cloud writes that were REJECTED outright (see SyncFailure in types.ts for why
+  // this is not the same thing as "waiting for the internet"). Surfaced in the UI
+  // by SyncFailureBanner so a lost sale can never pass for a queued one.
+  const [syncFailures, setSyncFailures] = useState<SyncFailure[]>([]);
+
+  const reportSyncFailure = (kind: SyncFailure['kind'], label: string, err: unknown) => {
+    const code = (err as { code?: string } | null)?.code;
+    const message = code || (err instanceof Error ? err.message : String(err));
+    console.error(`[sync] ${kind} REJECTED — ${label} (check auth / rules / data):`, err);
+    setSyncFailures((prev) =>
+      [
+        { id: newDocId('sf'), kind, label, message, at: new Date().toLocaleString() },
+        ...prev,
+      ].slice(0, 20)
+    );
+  };
+
+  const dismissSyncFailure = (id: string) => {
+    setSyncFailures((prev) => prev.filter((f) => f.id !== id));
+  };
 
   // ── Firebase Auth session ────────────────────────────────────────────────────
   // Every visitor gets a session: customers sign in anonymously; staff replace it
@@ -310,10 +407,44 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let isInitialLoad = true; // Prevents new-order chime spam on first paint
     const seeded: Record<string, boolean> = {};
 
-    // Aggregate pending-write status across collections for the header indicator.
-    const markPending = (key: string, snap: { metadata: { hasPendingWrites: boolean } }) => {
+    // Aggregate sync health across all five listeners for the header indicator.
+    //
+    // Two distinct facts come off every snapshot's metadata, and the header needs
+    // both:
+    //   • hasPendingWrites — this device has local changes the server has not
+    //     acknowledged yet. Counted per document so staff can see HOW MUCH is
+    //     waiting, not just that something is.
+    //   • fromCache — Firestore served this snapshot from its own IndexedDB cache
+    //     because it currently has no backend connection. This is the honest
+    //     answer to "are we online?": `navigator.onLine` only knows whether a
+    //     network interface exists, so it happily reports true on a café Wi-Fi
+    //     that cannot reach Google at all. Firestore drops fromCache to false on
+    //     every listener the moment its channel is up, and raises it on all of
+    //     them when the channel goes down.
+    const markSyncState = (
+      key: string,
+      snap: {
+        metadata: { hasPendingWrites: boolean; fromCache: boolean };
+        forEach: (cb: (d: { metadata: { hasPendingWrites: boolean } }) => void) => void;
+      }
+    ) => {
       pendingWritesRef.current[key] = snap.metadata.hasPendingWrites;
       setIsSyncing(Object.values(pendingWritesRef.current).some(Boolean));
+
+      let pending = 0;
+      snap.forEach((d) => {
+        if (d.metadata.hasPendingWrites) pending++;
+      });
+      pendingCountsRef.current[key] = pending;
+      setPendingWriteCount(
+        Object.values(pendingCountsRef.current).reduce((sum, n) => sum + n, 0)
+      );
+
+      fromCacheRef.current[key] = snap.metadata.fromCache;
+      // A pulled cable is worth reflecting instantly, before Firestore notices.
+      const deviceOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      const someListenerServerBacked = Object.values(fromCacheRef.current).some((c) => !c);
+      setIsCloudOnline(deviceOffline ? false : someListenerServerBacked);
     };
 
     // Seed a collection's defaults ONLY when the server (not the offline cache)
@@ -345,7 +476,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const list: Product[] = [];
             snap.forEach((d) => list.push(d.data() as Product));
             setProducts(list);
-            markPending('products', snap);
+            markSyncState('products', snap);
             seedIfEmpty('products', snap, COLLECTIONS.products, INITIAL_PRODUCTS);
           },
           (err) => console.warn('Firestore products listener:', err)
@@ -362,7 +493,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             snap.forEach((d) => list.push(d.data() as SaleTransaction));
             list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setTransactions(list);
-            markPending('transactions', snap);
+            markSyncState('transactions', snap);
             seedIfEmpty('transactions', snap, COLLECTIONS.transactions, INITIAL_TRANSACTIONS);
           },
           (err) => console.warn('Firestore transactions listener:', err)
@@ -387,7 +518,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             setPreOrders(list);
-            markPending('preOrders', snap);
+            markSyncState('preOrders', snap);
             seedIfEmpty('preOrders', snap, COLLECTIONS.preOrders, INITIAL_PREORDERS);
             isInitialLoad = false;
           },
@@ -405,7 +536,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             snap.forEach((d) => list.push(d.data() as StockTransferRecord));
             list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setStockTransfers(list);
-            markPending('stockTransfers', snap);
+            markSyncState('stockTransfers', snap);
             seedIfEmpty('stockTransfers', snap, COLLECTIONS.stockTransfers, INITIAL_TRANSFERS);
           },
           (err) => console.warn('Firestore stock-transfers listener:', err)
@@ -421,15 +552,24 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const list: PresetKit[] = [];
             snap.forEach((d) => list.push(d.data() as PresetKit));
             setPresetKits(list);
-            markPending('presetKits', snap);
+            markSyncState('presetKits', snap);
             seedIfEmpty('presetKits', snap, COLLECTIONS.presetKits, PRESET_KITS);
           },
           (err) => console.warn('Firestore preset-kits listener:', err)
         )
       );
 
-      // Probe initial connectivity (best-effort; the online/offline effect owns the flag)
-      testFirestoreConnection().catch(() => {});
+      // Cold-start reachability check. Before any listener has been acked, every
+      // snapshot legitimately reads fromCache = true, so this probe (which forces
+      // a server read) is what distinguishes "still connecting" from "genuinely
+      // cannot reach Firestore". Its result was previously thrown away.
+      testFirestoreConnection()
+        .then((reachable) => {
+          // Don't overrule a listener that has already reported from the server.
+          const alreadyProven = Object.values(fromCacheRef.current).some((c) => !c);
+          if (!alreadyProven) setIsCloudOnline(reachable);
+        })
+        .catch(() => setIsCloudOnline(false));
     } catch (err) {
       console.warn('Firestore initialization notice:', err);
     }
@@ -439,9 +579,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [authReady]);
 
-  // Track device connectivity so the header can show online vs. offline (queued) sync.
+  // Device-level connectivity events. Losing the interface means we are certainly
+  // offline, so that is applied immediately. REGAINING it proves nothing — the
+  // Wi-Fi may be a captive portal that cannot reach Google — so on 'online' we
+  // verify with a real server read instead of just claiming to be back.
   useEffect(() => {
-    const handleOnline = () => setIsCloudOnline(true);
+    const handleOnline = () => {
+      testFirestoreConnection()
+        .then((reachable) => setIsCloudOnline(reachable))
+        .catch(() => setIsCloudOnline(false));
+    };
     const handleOffline = () => setIsCloudOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -760,11 +907,27 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const totalItemCount = active.items.reduce((acc, item) => acc + item.quantity, 0);
 
     const now = new Date();
-    const dateCode = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const receiptNum = `HENZ-RCP-${dateCode}-${String(transactions.length + 1).padStart(3, '0')}`;
+    // Receipt number: date-stamped plus a 5-character random code, e.g.
+    // HENZ-RCP-20260822-K7M2D. NOT `transactions.length + 1` — that counter is
+    // computed from this terminal's cached list, so two registers (or one
+    // register that is offline and behind) mint the SAME receipt number for two
+    // different sales. A duplicated receipt number is a records problem the store
+    // cannot fix after the fact, since the printed copy is already with the
+    // customer. 5 characters over a 31-letter alphabet gives ~28.6M codes; the
+    // loop below additionally rejects any code this device has already seen.
+    const receiptNum = uniqueSerial(
+      (code) => `HENZ-RCP-${dateStamp(now)}-${code}`,
+      new Set(transactions.map((t) => t.receiptNumber)),
+      5
+    );
 
     const newTransaction: SaleTransaction = {
-      id: `tx-${Date.now()}`,
+      // Random suffix on top of the timestamp. Without it, two terminals
+      // completing a sale in the same millisecond produce the same document ID,
+      // and because `transactions` is `allow update: if false` in
+      // firestore.rules the second write is REJECTED rather than merged — which
+      // would silently discard that sale AND its stock deductions.
+      id: newDocId('tx', now),
       receiptNumber: receiptNum,
       timestamp: now.toLocaleString(),
       branch: activeBranch,
@@ -808,7 +971,21 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         orderStatus: 'Claimed',
       });
     }
-    batch.commit().catch((err) => console.warn('Sale queued offline, will sync:', err));
+    // A genuinely offline commit does NOT reject — Firestore appends it to a
+    // durable on-device queue and replays it on reconnect, so the promise just
+    // stays unsettled. Anything that DOES reject here is a real, permanent
+    // failure (expired session, security rule, invalid data) that has taken the
+    // sale AND its stock deductions with it. Report it as such; the old
+    // "queued offline, will sync" message described a lost sale as a safe one.
+    batch.commit().catch((err) =>
+      reportSyncFailure(
+        'Sale',
+        `Receipt ${receiptNum} — ₱${grandTotal.toLocaleString()} (${totalItemCount} item${
+          totalItemCount === 1 ? '' : 's'
+        })`,
+        err
+      )
+    );
 
     setRecentCompletedSale(newTransaction);
     soundEffects.playSuccessPayment();
@@ -833,23 +1010,15 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentRefNumber?: string;
     notes?: string;
   }): CustomerPreOrder => {
-    // Human-facing order number: date-stamped plus a short, unambiguous random
-    // code. Generated fully client-side so it works OFFLINE, and RANDOM rather
-    // than a running count (`preOrders.length + …`) — otherwise two customers
-    // ordering at the same moment on different devices compute the same count
-    // and collide on the same number. The alphabet omits easily-confused
-    // characters (0/O, 1/I/L) so the code is safe to read aloud and type into
-    // the tracker. The loop regenerates on the rare clash with a known order.
-    const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    const randomCode = (len: number) =>
-      Array.from({ length: len }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
+    // Human-facing order number: date-stamped plus a short random code (see
+    // src/utils/ids.ts for why random and not a running count). Generated fully
+    // client-side so it works OFFLINE, and safe to read aloud or type into the
+    // order tracker.
     const now = new Date();
-    const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const existingNumbers = new Set(preOrders.map((o) => o.orderNumber));
-    let nextOrderNum = `HNZ-${datePart}-${randomCode(4)}`;
-    for (let i = 0; i < 10 && existingNumbers.has(nextOrderNum); i++) {
-      nextOrderNum = `HNZ-${datePart}-${randomCode(4)}`;
-    }
+    const nextOrderNum = uniqueSerial(
+      (code) => `HNZ-${dateStamp(now)}-${code}`,
+      new Set(preOrders.map((o) => o.orderNumber))
+    );
     const orderItemsMapped = orderInput.items.map((i) => {
       const prod = products.find((p) => p.id === i.productId);
       return {
@@ -869,7 +1038,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Random suffix on top of the timestamp so two orders created in the same
       // millisecond on different devices get distinct document IDs — otherwise
       // the second setDoc would silently overwrite (lose) the first.
-      id: `po-${Date.now()}-${randomCode(4)}`,
+      id: newDocId('po', now),
       orderNumber: nextOrderNum,
       qrCodeValue: `HENZ-ORDER-${nextOrderNum}`,
       customerName: orderInput.customerName,
@@ -897,10 +1066,14 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // (auth, rules, or invalid data) that must be surfaced, not swallowed.
     try {
       setDoc(doc(db, COLLECTIONS.preOrders, newOrder.id), newOrder).catch((err) => {
-        console.error('Pre-order write REJECTED (check auth / rules / data):', err);
+        reportSyncFailure('Pre-order', `Order ${newOrder.orderNumber} — ${newOrder.customerName}`, err);
       });
     } catch (err) {
-      console.error('Pre-order write threw synchronously (invalid data):', err);
+      reportSyncFailure(
+        'Pre-order',
+        `Order ${newOrder.orderNumber} — ${newOrder.customerName} (invalid data)`,
+        err
+      );
     }
 
     return newOrder;
@@ -908,15 +1081,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updatePreOrderStatus = (orderId: string, status: PreOrderStatus, packedItemIds?: string[]) => {
     // Write to Firestore; the onSnapshot listener reflects it into local state.
+    const orderNumber = preOrders.find((o) => o.id === orderId)?.orderNumber || orderId;
     try {
       updateDoc(doc(db, COLLECTIONS.preOrders, orderId), {
         orderStatus: status,
         ...(packedItemIds ? { packedItemIds } : {}),
       }).catch((err) => {
-        console.warn('Status update queued offline, will sync:', err);
+        reportSyncFailure('Order status', `Order ${orderNumber} → ${status}`, err);
       });
-    } catch {
-      // offline fallback
+    } catch (err) {
+      reportSyncFailure('Order status', `Order ${orderNumber} → ${status} (invalid data)`, err);
     }
   };
 
@@ -936,11 +1110,19 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const fromBranchName = from === 'main' ? BRANCH_MAIN : BRANCH_USA;
     const toBranchName = to === 'main' ? BRANCH_MAIN : BRANCH_USA;
 
-    // Record in central transfer audit log
+    // Record in central transfer audit log. Like receipts, the transfer number is
+    // date-stamped + random rather than `stockTransfers.length + 1`, and the
+    // document ID carries a random suffix — `stock_transfers` is also
+    // `allow update: if false`, so a same-millisecond ID clash between the two
+    // branches would reject the whole batch and lose the stock movement.
+    const now = new Date();
     const transferRecord: StockTransferRecord = {
-      id: `tr-${Date.now()}`,
-      transferNumber: `HENZ-TR-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(stockTransfers.length + 1).padStart(2, '0')}`,
-      timestamp: new Date().toLocaleString(),
+      id: newDocId('tr', now),
+      transferNumber: uniqueSerial(
+        (code) => `HENZ-TR-${dateStamp(now)}-${code}`,
+        new Set(stockTransfers.map((t) => t.transferNumber))
+      ),
+      timestamp: now.toLocaleString(),
       productId: targetProd.id,
       productName: targetProd.name,
       sku: targetProd.sku,
@@ -959,7 +1141,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       stockUsaBranch: increment(from === 'usa' ? -quantity : quantity),
     });
     batch.set(doc(db, COLLECTIONS.stockTransfers, transferRecord.id), transferRecord);
-    batch.commit().catch((err) => console.warn('Transfer queued offline, will sync:', err));
+    batch.commit().catch((err) =>
+      reportSyncFailure(
+        'Stock transfer',
+        `${transferRecord.transferNumber} — ${quantity}× ${targetProd.name}`,
+        err
+      )
+    );
 
     soundEffects.playQRScanChime();
   };
@@ -972,14 +1160,15 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     batchNumber?: string,
     expiryDate?: string
   ) => {
+    const prodName = products.find((p) => p.id === productId)?.name || productId;
     try {
       updateDoc(doc(db, COLLECTIONS.products, productId), {
         [target === 'main' ? 'stockMainBranch' : 'stockUsaBranch']: increment(quantity),
         ...(batchNumber ? { batchNumber } : {}),
         ...(expiryDate ? { expiryDate } : {}),
-      }).catch((err) => console.warn('Restock queued offline, will sync:', err));
-    } catch {
-      // offline fallback
+      }).catch((err) => reportSyncFailure('Inventory', `Restock ${quantity}× ${prodName}`, err));
+    } catch (err) {
+      reportSyncFailure('Inventory', `Restock ${quantity}× ${prodName} (invalid data)`, err);
     }
     soundEffects.playQRScanChime();
   };
@@ -987,7 +1176,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CRUD: Update Product
   const updateProduct = (product: Product) => {
     setDoc(doc(db, COLLECTIONS.products, product.id), product).catch((err) =>
-      console.warn('Product update queued offline, will sync:', err)
+      reportSyncFailure('Inventory', `Update ${product.name}`, err)
     );
   };
 
@@ -995,17 +1184,18 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addProduct = (productData: Omit<Product, 'id'>) => {
     const newProd: Product = {
       ...productData,
-      id: `prod-${Date.now()}`,
+      id: newDocId('prod'),
     };
     setDoc(doc(db, COLLECTIONS.products, newProd.id), newProd).catch((err) =>
-      console.warn('New product queued offline, will sync:', err)
+      reportSyncFailure('Inventory', `New product ${newProd.name}`, err)
     );
   };
 
   // CRUD: Delete Product
   const deleteProduct = (productId: string) => {
+    const prodName = products.find((p) => p.id === productId)?.name || productId;
     deleteDoc(doc(db, COLLECTIONS.products, productId)).catch((err) =>
-      console.warn('Product delete queued offline, will sync:', err)
+      reportSyncFailure('Inventory', `Delete ${prodName}`, err)
     );
   };
 
@@ -1013,12 +1203,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addPresetKit = (kitData: Omit<PresetKit, 'id'>): PresetKit => {
     const newKit: PresetKit = {
       ...kitData,
-      id: `kit-custom-${Date.now()}`,
+      id: `kit-custom-${Date.now()}-${randomCode(4)}`,
       isCustom: true,
       createdAt: new Date().toLocaleDateString(),
     };
     setDoc(doc(db, COLLECTIONS.presetKits, newKit.id), newKit).catch((err) =>
-      console.warn('Preset kit queued offline, will sync:', err)
+      reportSyncFailure('Starter kit', `New kit ${newKit.name}`, err)
     );
     soundEffects.playQRScanChime();
     return newKit;
@@ -1027,15 +1217,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // CRUD: Update Preset Starter Kit
   const updatePresetKit = (updatedKit: PresetKit) => {
     setDoc(doc(db, COLLECTIONS.presetKits, updatedKit.id), updatedKit).catch((err) =>
-      console.warn('Preset kit update queued offline, will sync:', err)
+      reportSyncFailure('Starter kit', `Update ${updatedKit.name}`, err)
     );
     soundEffects.playQRScanChime();
   };
 
   // CRUD: Delete Preset Starter Kit
   const deletePresetKit = (kitId: string) => {
+    const kitName = presetKits.find((k) => k.id === kitId)?.name || kitId;
     deleteDoc(doc(db, COLLECTIONS.presetKits, kitId)).catch((err) =>
-      console.warn('Preset kit delete queued offline, will sync:', err)
+      reportSyncFailure('Starter kit', `Delete ${kitName}`, err)
     );
     soundEffects.playScanBeep();
   };
@@ -1043,7 +1234,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Reset Preset Starter Kits to default clinical catalog
   const resetPresetKitsToDefaults = () => {
     PRESET_KITS.forEach((kit) => {
-      setDoc(doc(db, COLLECTIONS.presetKits, kit.id), kit).catch(() => {});
+      setDoc(doc(db, COLLECTIONS.presetKits, kit.id), kit).catch((err) =>
+        reportSyncFailure('Starter kit', `Restore default kit ${kit.name}`, err)
+      );
     });
     soundEffects.playQRScanChime();
   };
@@ -1096,6 +1289,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteProduct,
         isCloudOnline,
         isSyncing,
+        pendingWriteCount,
+        syncFailures,
+        dismissSyncFailure,
         databaseMeta,
         exportDatabaseJSON,
         importDatabaseJSON,

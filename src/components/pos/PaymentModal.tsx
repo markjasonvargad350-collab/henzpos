@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CreditCard,
   Banknote,
@@ -13,6 +13,7 @@ import {
   Building2,
   Receipt,
   Percent,
+  AlertTriangle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { usePOS } from '../../context/POSContext';
@@ -30,7 +31,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onClose,
   onPaymentSuccess,
 }) => {
-  const { heldCarts, activeCartIndex, completeSale } = usePOS();
+  const { heldCarts, activeCartIndex, completeSale, products, activeBranch } = usePOS();
   const currentCart = heldCarts[activeCartIndex];
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
@@ -48,8 +49,35 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [bankRef, setBankRef] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
+  // Deliberate opt-in to selling past the recorded stock level. Off by default and
+  // reset every time the modal is reopened, so an override never carries over to
+  // the next customer.
+  const [overrideStock, setOverrideStock] = useState(false);
+
+  // This modal stays mounted between sales, so the override has to be cleared
+  // explicitly on each open or it would silently stay on for the next customer.
+  useEffect(() => {
+    if (!isOpen) return;
+    setOverrideStock(false);
+    setErrorMessage(null);
+  }, [isOpen]);
 
   if (!isOpen || !currentCart || currentCart.items.length === 0) return null;
+
+  // Stock check against the live product list for THIS branch. Until now nothing
+  // validated availability — the Complete Sale button was only disabled on an
+  // empty cart — so a cart could be checked out for more units than exist and
+  // increment(-qty) would quietly drive the count negative. That is easy to do
+  // offline, where the cached stock figure may be hours stale.
+  const isUsaBranch =
+    activeBranch.includes('USA Branch') || activeBranch.includes('San Agustin');
+  const stockShortfalls = currentCart.items
+    .map((item) => {
+      const live = products.find((p) => p.id === item.product.id);
+      const available = live ? (isUsaBranch ? live.stockUsaBranch : live.stockMainBranch) : 0;
+      return { name: item.product.name, unit: item.product.unit, requested: item.quantity, available };
+    })
+    .filter((s) => s.requested > s.available);
 
   const rawSubtotal = currentCart.items.reduce((acc, item) => acc + item.subtotal, 0);
   const discountAmount = Math.round((rawSubtotal * discountPercent) / 100);
@@ -74,6 +102,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     if (paymentMethod === 'Bank Payment' && !bankRef.trim()) {
       setErrorMessage('Please enter the Bank Transfer Reference Number.');
+      return;
+    }
+
+    if (stockShortfalls.length > 0 && !overrideStock) {
+      setErrorMessage(
+        'Not enough stock recorded at this branch for ' +
+          stockShortfalls
+            .map((s) => `${s.name} (${s.requested} needed, ${s.available} on hand)`)
+            .join('; ') +
+          '. Adjust the cart, or tick "Sell anyway" below if the items are physically on the shelf.'
+      );
       return;
     }
 
@@ -400,6 +439,52 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <div className="text-[11px] text-indigo-900 bg-white p-2 rounded-lg border border-indigo-200 font-medium">
                 HENZ Health Care Trading Account: <span className="font-mono font-bold text-slate-900">0048-2910-4491</span>
               </div>
+            </div>
+          )}
+
+          {/* Stock shortfall warning + deliberate staff override */}
+          {stockShortfalls.length > 0 && (
+            <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-300 space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-amber-900">
+                    Recorded stock is lower than this cart
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    Counts may be out of date if this register has been offline or another
+                    branch sold the same item.
+                  </p>
+                </div>
+              </div>
+
+              <ul className="space-y-1">
+                {stockShortfalls.map((s) => (
+                  <li
+                    key={s.name}
+                    className="flex items-center justify-between gap-3 bg-white px-2.5 py-1.5 rounded-lg border border-amber-200 text-[11px]"
+                  >
+                    <span className="font-semibold text-slate-800 truncate">{s.name}</span>
+                    <span className="font-mono font-bold text-amber-900 whitespace-nowrap">
+                      {s.requested} needed / {s.available} {s.unit} on hand
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <label className="flex items-start gap-2 cursor-pointer text-[11px] text-amber-900 bg-white px-2.5 py-2 rounded-lg border border-amber-200">
+                <input
+                  type="checkbox"
+                  checked={overrideStock}
+                  onChange={(e) => setOverrideStock(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 rounded text-amber-600 focus:ring-amber-500 shrink-0"
+                />
+                <span>
+                  <span className="font-bold">Sell anyway</span> — the items are physically on
+                  the shelf. The recorded count will go negative until someone recounts it in
+                  Inventory.
+                </span>
+              </label>
             </div>
           )}
 

@@ -343,14 +343,23 @@ export const POSTerminal: React.FC = () => {
                     <div>
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                          currentStock === 0
+                          currentStock < 0
+                            ? 'bg-rose-600 text-white border-rose-700'
+                            : currentStock === 0
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : isLowStock
                             ? 'bg-amber-50 text-amber-800 border-amber-200'
                             : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         }`}
+                        title={
+                          currentStock < 0
+                            ? 'Oversold — the recorded count is below zero. Recount this item in Inventory.'
+                            : undefined
+                        }
                       >
-                        {currentStock} in stock
+                        {currentStock < 0
+                          ? `${currentStock} — oversold`
+                          : `${currentStock} in stock`}
                       </span>
                     </div>
                   </div>

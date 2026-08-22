@@ -12,7 +12,9 @@ import { OrderPrepQueue } from './components/prep/OrderPrepQueue';
 import { InventoryManagement } from './components/inventory/InventoryManagement';
 import { ReportsView } from './components/reports/ReportsView';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
+import { PWAStatusToast } from './components/common/PWAStatusToast';
 import { SharePreOrderModal } from './components/common/SharePreOrderModal';
+import { SyncFailureBanner } from './components/common/SyncFailureBanner';
 import { UnifiedDatabaseModal } from './components/database/UnifiedDatabaseModal';
 
 const MainLayout: React.FC = () => {
@@ -61,6 +63,12 @@ const MainLayout: React.FC = () => {
 
       {/* Unified Database Architecture & 2-Branch Status Modal */}
       <UnifiedDatabaseModal />
+
+      {/* Offline-ready confirmation / new-version prompt (service worker) */}
+      <PWAStatusToast />
+
+      {/* Loud, non-dismissing-on-its-own alert for writes the cloud REJECTED */}
+      <SyncFailureBanner />
 
       {/* Clean Medical Retail Footer */}
       <footer className="bg-white border-t border-slate-200 py-3 px-4 text-center text-xs text-slate-500 print:hidden shadow-xs">

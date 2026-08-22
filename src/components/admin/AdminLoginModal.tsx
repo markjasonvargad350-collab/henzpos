@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Lock, KeyRound, AlertCircle, X } from 'lucide-react';
+import { ShieldAlert, Lock, KeyRound, AlertCircle, WifiOff, X } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { soundEffects } from '../../utils/audio';
 
@@ -9,7 +9,7 @@ interface AdminLoginModalProps {
 }
 
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClose }) => {
-  const { loginAdmin } = usePOS();
+  const { loginAdmin, isCloudOnline } = usePOS();
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -28,15 +28,20 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setErrorMessage('');
     setIsLoading(true);
 
-    const success = await loginAdmin(password.trim());
+    const result = await loginAdmin(password.trim());
     setIsLoading(false);
 
-    if (success) {
+    if (result.ok) {
       soundEffects.playQRScanChime();
       onClose();
     } else {
       soundEffects.playErrorBeep();
-      setErrorMessage('Incorrect staff password. Please check with the store owner and try again.');
+      // The reason comes from the context, which distinguishes a wrong password
+      // from a failure to reach the auth server at all.
+      setErrorMessage(
+        result.message ||
+          'Incorrect staff password. Please check with the store owner and try again.'
+      );
     }
   };
 
@@ -69,9 +74,21 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {errorMessage && (
-            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-700 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
               <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Firebase Auth has no offline password check, so warn before the
+              cashier types a password that cannot possibly be verified. */}
+          {!isCloudOnline && !errorMessage && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+              <WifiOff className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+              <span>
+                <span className="font-bold">No connection right now.</span> Signing in needs
+                internet, even though the register keeps working offline once signed in.
+              </span>
             </div>
           )}
 

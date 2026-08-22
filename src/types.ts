@@ -162,3 +162,24 @@ export interface PresetKit {
   createdAt?: string;
 }
 
+/**
+ * A cloud write that was REJECTED — not one that is merely waiting for the
+ * internet to come back.
+ *
+ * The distinction matters and is easy to get backwards: an offline Firestore
+ * write does not fail. It is appended to a durable on-device queue and replayed
+ * automatically on reconnect, so the promise simply stays unsettled. Therefore
+ * every rejection we do see is a real, permanent problem — bad data, an expired
+ * session, or a security rule saying no — and treating it as "queued offline,
+ * will sync" hides a lost sale behind a reassuring message.
+ */
+export interface SyncFailure {
+  id: string;
+  kind: 'Sale' | 'Pre-order' | 'Stock transfer' | 'Order status' | 'Inventory' | 'Starter kit';
+  /** What was lost, in the staff's own terms, e.g. "Receipt HENZ-RCP-…  ₱1,250". */
+  label: string;
+  /** The Firestore error code where available, otherwise the message. */
+  message: string;
+  at: string;
+}
+

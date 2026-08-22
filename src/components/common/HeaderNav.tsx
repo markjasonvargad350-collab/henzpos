@@ -35,6 +35,7 @@ export const HeaderNav: React.FC = () => {
     heldCarts,
     isCloudOnline,
     isSyncing,
+    pendingWriteCount,
   } = usePOS();
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -68,7 +69,9 @@ export const HeaderNav: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Cloud sync status — hybrid database health at a glance */}
+            {/* Cloud sync status — hybrid database health at a glance. isCloudOnline
+                reflects whether Firestore itself is reachable (not merely whether a
+                network interface exists), and the count is real unsynced documents. */}
             <div
               className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border font-semibold ${
                 isSyncing
@@ -78,11 +81,19 @@ export const HeaderNav: React.FC = () => {
                   : 'bg-slate-800 border-slate-600/50 text-slate-300'
               }`}
               title={
-                isSyncing
-                  ? 'Saving changes to the cloud…'
-                  : isCloudOnline
-                  ? 'Online — all branches synced in real time'
-                  : 'Offline — changes are saved on this device and will sync automatically when back online'
+                isCloudOnline
+                  ? isSyncing
+                    ? `Saving ${pendingWriteCount} record${
+                        pendingWriteCount === 1 ? '' : 's'
+                      } to the cloud…`
+                    : 'Online — all branches synced in real time'
+                  : `Offline — cannot reach the database. ${
+                      pendingWriteCount > 0
+                        ? `${pendingWriteCount} record${
+                            pendingWriteCount === 1 ? '' : 's'
+                          } saved on this device, waiting to sync.`
+                        : 'Changes are saved on this device.'
+                    } They sync automatically when the connection returns; do not clear this browser's data in the meantime.`
               }
             >
               {isSyncing ? (
@@ -95,6 +106,15 @@ export const HeaderNav: React.FC = () => {
               <span className="hidden sm:inline">
                 {isSyncing ? 'Syncing…' : isCloudOnline ? 'Online' : 'Offline'}
               </span>
+              {pendingWriteCount > 0 && (
+                <span
+                  className={`ml-0.5 px-1 rounded-full text-[10px] font-bold ${
+                    isCloudOnline ? 'bg-amber-500/25' : 'bg-amber-400 text-slate-900'
+                  }`}
+                >
+                  {pendingWriteCount}
+                </span>
+              )}
             </div>
 
             {/* Quick Share Student Link */}
