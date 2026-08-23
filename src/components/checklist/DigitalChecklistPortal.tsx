@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ClipboardList,
   Sparkles,
@@ -46,6 +46,7 @@ import { QRCodeRenderer } from '../common/QRCodeRenderer';
 import { PresetKitModal } from './PresetKitModal';
 import { OrderStatusTracker } from './OrderStatusTracker';
 import { openGmailWeb, openClientEmail } from '../../utils/emailNotifier';
+import { countMyOrdersInProgress, rememberMyOrderNumber } from '../../lib/myOrders';
 
 export const DigitalChecklistPortal: React.FC = () => {
   const {
@@ -65,6 +66,15 @@ export const DigitalChecklistPortal: React.FC = () => {
   // Portal Navigation Tabs: 'order' (Build Checklist) vs 'track' (Order Status Tracker)
   const [activePortalTab, setActivePortalTab] = useState<'order' | 'track'>('order');
   const [trackedOrderNumber, setTrackedOrderNumber] = useState<string>('');
+  // Bumped whenever this device places an order. The "my orders" list lives in
+  // localStorage, which React cannot observe, so the badge needs a nudge to
+  // recount after a submit.
+  const [myOrdersVersion, setMyOrdersVersion] = useState(0);
+  const myOrdersInProgress = useMemo(
+    () => countMyOrdersInProgress(preOrders),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [preOrders, myOrdersVersion]
+  );
 
   // Form states
   const [customerName, setCustomerName] = useState('');
@@ -269,14 +279,8 @@ export const DigitalChecklistPortal: React.FC = () => {
     setSubmittedOrder(newOrder);
 
     // Save to customer's private device session so they can track only their own orders
-    try {
-      const existingMyOrders: string[] = JSON.parse(localStorage.getItem('henz_my_orders_v1') || '[]');
-      if (!existingMyOrders.includes(newOrder.orderNumber)) {
-        localStorage.setItem('henz_my_orders_v1', JSON.stringify([newOrder.orderNumber, ...existingMyOrders]));
-      }
-    } catch {
-      // ignore
-    }
+    rememberMyOrderNumber(newOrder.orderNumber);
+    setMyOrdersVersion((v) => v + 1);
 
     try {
       confetti({
@@ -353,10 +357,13 @@ export const DigitalChecklistPortal: React.FC = () => {
             }`}
           >
             <Clock className="w-4 h-4" />
-            <span>2. Track Order Status & Notifications</span>
-            {preOrders.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-teal-400 text-slate-950">
-                {preOrders.length}
+            <span>2. Track Order Status &amp; Notifications</span>
+            {myOrdersInProgress > 0 && (
+              <span
+                title={`${myOrdersInProgress} of your orders ${myOrdersInProgress === 1 ? 'is' : 'are'} still in progress`}
+                className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-teal-400 text-slate-950"
+              >
+                {myOrdersInProgress}
               </span>
             )}
           </button>

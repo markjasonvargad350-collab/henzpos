@@ -24,7 +24,11 @@ import {
   HardDrive,
   ShieldCheck,
   Zap,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
+import { PurgeResult, PurgeTarget } from '../../types';
+import { recordsToPurge } from '../../lib/housekeeping';
 
 export const UnifiedDatabaseModal: React.FC = () => {
   const {
@@ -38,14 +42,27 @@ export const UnifiedDatabaseModal: React.FC = () => {
     exportDatabaseJSON,
     importDatabaseJSON,
     resetDatabaseToDefaults,
+    purgeOldRecords,
+    isAdminAuthenticated,
   } = usePOS();
 
   const [activeTab, setActiveTab] = useState<'architecture' | 'transfers' | 'backup'>('architecture');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  // Housekeeping: which Clear button is armed, how old a record must be, and the
+  // outcome of the last run. `null` age means "every record of this kind".
+  const [purgeAge, setPurgeAge] = useState<number | null>(90);
+  const [armedPurge, setArmedPurge] = useState<PurgeTarget | null>(null);
+  const [purgeBusy, setPurgeBusy] = useState<PurgeTarget | null>(null);
+  const [purgeResult, setPurgeResult] = useState<PurgeResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isDatabaseModalOpen) return null;
+  // Staff only, checked here as well as at the door in StoreSettingsModal. This
+  // screen exports the full customer list and every sale, resets the catalogue,
+  // and deletes old records — a customer must never render it, whichever caller
+  // opened it.
+  if (!isAdminAuthenticated) return null;
 
   // Calculate live database metrics
   const mainStockTotal = products.reduce((acc, p) => acc + p.stockMainBranch, 0);
@@ -80,6 +97,46 @@ export const UnifiedDatabaseModal: React.FC = () => {
     };
     reader.readAsText(file);
   };
+
+  // ── Clear Old Records ─────────────────────────────────────────────────────
+  // Counts come from the same predicate the delete uses (lib/housekeeping), so
+  // the number on the confirm button is the number that disappears.
+  const PURGE_TARGETS: { target: PurgeTarget; label: string; blurb: string }[] = [
+    {
+      target: 'sales',
+      label: 'Old sales',
+      blurb: 'Completed receipts. Exported with full BIR detail — receipt no, tax, grand total, item lines — before deleting.',
+    },
+    {
+      target: 'cancelledOrders',
+      label: 'Cancelled pre-orders',
+      blurb: 'Orders that were cancelled and will never be collected.',
+    },
+    {
+      target: 'completedOrders',
+      label: 'Claimed pre-orders',
+      blurb: 'Orders the customer already picked up.',
+    },
+  ];
+
+  const purgeCount = (target: PurgeTarget) =>
+    recordsToPurge(target, purgeAge, transactions, preOrders).count;
+
+  const runPurge = async (target: PurgeTarget) => {
+    setPurgeBusy(target);
+    setArmedPurge(null);
+    setPurgeResult(null);
+    const result = await purgeOldRecords(target, purgeAge);
+    setPurgeResult(result);
+    setPurgeBusy(null);
+  };
+
+  const AGE_CHOICES: { label: string; days: number | null }[] = [
+    { label: 'Older than 1 year', days: 365 },
+    { label: 'Older than 90 days', days: 90 },
+    { label: 'Older than 30 days', days: 30 },
+    { label: 'Everything', days: null },
+  ];
 
   return (
     <div
@@ -419,6 +476,127 @@ export const UnifiedDatabaseModal: React.FC = () => {
                     Select JSON File
                   </button>
                 </div>
+              </div>
+
+              {/* Clear Old Records Card */}
+              <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-5">
+                <div className="flex items-start gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-sm">Clear Old Records (Export &amp; Delete)</h4>
+                    <p className="text-xs text-slate-600 mt-1 max-w-2xl">
+                      Every old record is loaded from the cloud each time the app opens, so trimming finished
+                      business keeps the app fast. Each button <strong>downloads a CSV first</strong> and only then
+                      deletes — the spreadsheet is your permanent copy, so keep it somewhere safe. Orders that are
+                      still <strong>Pending, Preparing or Ready for Pickup</strong> can never be cleared here.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Age selector */}
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mr-1">
+                    Clear records
+                  </span>
+                  {AGE_CHOICES.map((choice) => (
+                    <button
+                      key={choice.label}
+                      onClick={() => {
+                        setPurgeAge(choice.days);
+                        setArmedPurge(null);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        purgeAge === choice.days
+                          ? 'bg-amber-600 border-amber-600 text-white shadow-sm'
+                          : 'bg-white border-slate-300 text-slate-600 hover:border-amber-400'
+                      }`}
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* One row per target */}
+                <div className="mt-4 space-y-2">
+                  {PURGE_TARGETS.map(({ target, label, blurb }) => {
+                    const count = purgeCount(target);
+                    const isBusy = purgeBusy === target;
+                    const isArmed = armedPurge === target;
+                    return (
+                      <div
+                        key={target}
+                        className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800">
+                            {label}
+                            <span
+                              className={`ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                count > 0 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {count} match{count === 1 ? '' : 'es'}
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{blurb}</p>
+                        </div>
+
+                        {isBusy ? (
+                          <span className="px-3 py-1.5 text-xs font-semibold text-amber-700 flex items-center gap-2 shrink-0">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Exporting &amp; clearing…
+                          </span>
+                        ) : isArmed ? (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => runPurge(target)}
+                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm"
+                            >
+                              Download CSV &amp; delete {count}
+                            </button>
+                            <button
+                              onClick={() => setArmedPurge(null)}
+                              className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            id={`btn-purge-${target}`}
+                            onClick={() => {
+                              setPurgeResult(null);
+                              setArmedPurge(target);
+                            }}
+                            disabled={count === 0 || purgeBusy !== null}
+                            className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all shrink-0 enabled:hover:border-red-400 enabled:hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {purgeResult && (
+                  <div
+                    className={`mt-3 p-3 rounded-lg text-xs flex items-start justify-between gap-2 border ${
+                      purgeResult.ok
+                        ? 'bg-teal-50 border-teal-200 text-teal-800'
+                        : 'bg-red-50 border-red-200 text-red-800'
+                    }`}
+                  >
+                    <span>{purgeResult.message}</span>
+                    <button
+                      onClick={() => setPurgeResult(null)}
+                      className="font-bold ml-2 opacity-70 hover:opacity-100"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Reset to Standard Defaults Card */}

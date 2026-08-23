@@ -19,11 +19,16 @@ service cloud.firestore {
     }
 
     // Medical Pre-Orders: customers (anonymous) may read and place orders;
-    // only staff may update status/packing; no one may ever delete a placed order.
+    // only staff may update status/packing.
+    //
+    // Staff may delete, but ONLY as housekeeping: the Clear Old Records tool in
+    // the Unified Database screen exports a CSV before it deletes anything, and
+    // it only ever offers finished orders (Cancelled / Claimed). Nothing in the
+    // customer portal can reach this — `isStaff()` excludes anonymous sessions.
     match /preOrders/{preOrderId} {
       allow read, create: if isSignedIn();
       allow update: if isStaff();
-      allow delete: if false;
+      allow delete: if isStaff();
     }
 
     // Inventory Products: anyone signed in can read stock/prices; only staff
@@ -34,11 +39,20 @@ service cloud.firestore {
     }
 
     // Sales Transactions: readable by signed-in sessions; only staff may record
-    // a sale. Once written, a transaction is immutable (tamper-proof).
+    // a sale.
+    //
+    // `update` stays permanently closed — a recorded sale can never be ALTERED,
+    // which is the property that makes the sales report trustworthy as BIR
+    // paperwork. `delete` is open to staff purely so old records can be cleared
+    // out once they have been exported to CSV; the housekeeping tool refuses to
+    // delete anything it has not first written to a file. Removing a whole
+    // receipt is visible (the report total drops); silently editing one would
+    // not be, which is why only the former is permitted.
     match /transactions/{transactionId} {
       allow read: if isSignedIn();
       allow create: if isStaff();
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isStaff();
     }
 
     // Stock Transfers: readable by signed-in sessions; only staff may log a

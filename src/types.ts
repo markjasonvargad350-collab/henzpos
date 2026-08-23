@@ -203,11 +203,31 @@ export interface PresetKit {
  */
 export interface SyncFailure {
   id: string;
-  kind: 'Sale' | 'Pre-order' | 'Stock transfer' | 'Order status' | 'Inventory' | 'Starter kit';
+  kind: 'Sale' | 'Pre-order' | 'Stock transfer' | 'Order status' | 'Inventory' | 'Starter kit' | 'Housekeeping';
   /** What was lost, in the staff's own terms, e.g. "Receipt HENZ-RCP-…  ₱1,250". */
   label: string;
   /** The Firestore error code where available, otherwise the message. */
   message: string;
   at: string;
+}
+
+/**
+ * What the Clear Old Records housekeeping tool is allowed to purge.
+ *
+ * Deliberately only finished business: completed sales, and pre-orders that are
+ * already Cancelled or Claimed. There is no target for a Pending, Preparing or
+ * Ready-for-Pickup order — an order a customer is still waiting on must never be
+ * one confirm-click away from deletion.
+ */
+export type PurgeTarget = 'sales' | 'cancelledOrders' | 'completedOrders';
+
+export interface PurgeResult {
+  ok: boolean;
+  /** Documents actually removed from Firestore. */
+  deleted: number;
+  /** Staff-facing outcome, shown verbatim in the Unified Database screen. */
+  message: string;
+  /** Name of the CSV written before deleting, when one was produced. */
+  exportedAs?: string;
 }
 

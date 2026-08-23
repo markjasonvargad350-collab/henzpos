@@ -12,6 +12,8 @@ import {
   UnifiedDatabaseMeta,
   PresetKit,
   SyncFailure,
+  PurgeTarget,
+  PurgeResult,
 } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { INITIAL_PREORDERS } from '../data/initialPreOrders';
@@ -19,6 +21,8 @@ import { INITIAL_TRANSFERS } from '../data/initialTransfers';
 import { PRESET_KITS } from '../data/presetKits';
 import { soundEffects } from '../utils/audio';
 import { dateStamp, newDocId, randomCode, uniqueSerial } from '../utils/ids';
+import { buildCsv, downloadCsv } from '../utils/exportCsv';
+import { olderThan, purgeOrderStatus } from '../lib/housekeeping';
 import { db, auth, STAFF_EMAIL, testFirestoreConnection } from '../lib/firebase';
 import {
   BRANCH_MAIN,
@@ -173,6 +177,11 @@ interface POSContextType {
   exportDatabaseJSON: () => void;
   importDatabaseJSON: (jsonString: string) => boolean;
   resetDatabaseToDefaults: () => void;
+  /**
+   * Exports the matching records to CSV, then permanently deletes them.
+   * `olderThanDays: null` means every record of that kind.
+   */
+  purgeOldRecords: (target: PurgeTarget, olderThanDays: number | null) => Promise<PurgeResult>;
   isJulyPeakSeasonMode: boolean;
   setIsJulyPeakSeasonMode: (val: boolean | ((prev: boolean) => boolean)) => void;
   activeView: ActiveNavView;
@@ -735,6 +744,167 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     writeAll(COLLECTIONS.stockTransfers, INITIAL_TRANSFERS);
     writeAll(COLLECTIONS.presetKits, PRESET_KITS);
     soundEffects.playQRScanChime();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Clear Old Records (storage housekeeping)
+  //
+  // Every terminal loads whole collections on open, so old finished records cost
+  // a Firestore read on every page load forever. Clearing them keeps the app fast
+  // and the bill flat — but a purged record has no copy anywhere, so this ALWAYS
+  // writes a CSV first and refuses to delete if that CSV was not produced.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Deletes ids in chunks. Firestore caps a batch at 500 writes, so a store with
+   * a year of receipts would silently fail on a single batch.
+   */
+  const deleteInChunks = async (colName: string, ids: string[]): Promise<number> => {
+    const CHUNK = 400;
+    let removed = 0;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const batch = writeBatch(db);
+      const slice = ids.slice(i, i + CHUNK);
+      slice.forEach((id) => batch.delete(doc(db, colName, id)));
+      await batch.commit();
+      removed += slice.length;
+    }
+    return removed;
+  };
+
+  const purgeOldRecords = async (
+    target: PurgeTarget,
+    olderThanDays: number | null
+  ): Promise<PurgeResult> => {
+    // The rules only allow staff to delete, so check here too — a clear sentence
+    // beats a raw permission-denied, and it stops a CSV being downloaded for a
+    // delete that was never going to be allowed.
+    if (!isAdminAuthenticated) {
+      return {
+        ok: false,
+        deleted: 0,
+        message: 'Only signed-in staff can clear records. Log in as staff and try again.',
+      };
+    }
+
+    // A batch commit only resolves once the server acknowledges it, so offline
+    // this would hang forever behind a spinner. Housekeeping is never urgent.
+    if (!isCloudOnline) {
+      return {
+        ok: false,
+        deleted: 0,
+        message:
+          'No connection to the database. Clearing old records needs to be online — try again once the header shows Online.',
+      };
+    }
+
+    const stamp = dateStamp();
+    try {
+      if (target === 'sales') {
+        const doomed = olderThan(transactions, olderThanDays, (t) => t.timestamp);
+        if (doomed.length === 0) {
+          return { ok: false, deleted: 0, message: 'No sales match that age range — nothing was cleared.' };
+        }
+        const filename = `HENZ_Sales_Archive_${stamp}.csv`;
+        downloadCsv(
+          filename,
+          buildCsv(
+            ['Receipt No', 'Date/Time', 'Branch', 'Cashier', 'Customer', 'Customer Type', 'Status', 'Payment', 'Reference No', 'Bank', 'Pre-Order Ref', 'Total Items', 'Subtotal', 'Discount', 'Tax', 'Grand Total', 'Tendered', 'Change', 'Item Detail'],
+            doomed.map((t) => [
+              t.receiptNumber,
+              t.timestamp,
+              t.branch,
+              t.cashierName,
+              t.customerName,
+              t.customerType,
+              t.status,
+              t.paymentMethod,
+              t.referenceNumber || '',
+              t.bankName || '',
+              t.preOrderRefCode || '',
+              t.totalItemCount,
+              t.subtotal,
+              t.discountAmount,
+              t.taxAmount,
+              t.grandTotal,
+              t.amountTendered ?? '',
+              t.changeDue ?? '',
+              t.items
+                .map((i) => `${i.quantity}x ${i.product.name} @${i.unitPrice} = ${i.subtotal}`)
+                .join(' | '),
+            ])
+          )
+        );
+        const deleted = await deleteInChunks(COLLECTIONS.transactions, doomed.map((t) => t.id));
+        return {
+          ok: true,
+          deleted,
+          exportedAs: filename,
+          message: `Cleared ${deleted} sale${deleted === 1 ? '' : 's'}. Saved to ${filename} — keep that file for your records.`,
+        };
+      }
+
+      // Cancelled and Claimed pre-orders. Pending/Preparing/Ready are never offered.
+      const wanted: PreOrderStatus = purgeOrderStatus(target);
+      const doomed = olderThan(
+        preOrders.filter((o) => o.orderStatus === wanted),
+        olderThanDays,
+        (o) => o.createdAt
+      );
+      if (doomed.length === 0) {
+        return {
+          ok: false,
+          deleted: 0,
+          message: `No ${wanted.toLowerCase()} pre-orders match that age range — nothing was cleared.`,
+        };
+      }
+      const filename = `HENZ_${wanted}_PreOrders_${stamp}.csv`;
+      downloadCsv(
+        filename,
+        buildCsv(
+          ['Order No', 'Placed', 'Status', 'Customer', 'School / Clinic', 'Contact', 'Email', 'Pickup Branch', 'Target Pickup', 'Payment', 'Payment Status', 'Items', 'Total', 'Item Detail', 'Notes'],
+          doomed.map((o) => [
+            o.orderNumber,
+            o.createdAt,
+            o.orderStatus,
+            o.customerName,
+            o.schoolOrClinic,
+            o.contactNumber,
+            o.email || '',
+            o.pickupBranch,
+            o.targetPickupDate,
+            o.paymentMethod,
+            o.paymentStatus,
+            o.totalItems,
+            o.totalAmount,
+            o.items.map((i) => `${i.quantity}x ${i.productName} @${i.unitPrice}`).join(' | '),
+            o.notes || '',
+          ])
+        )
+      );
+      const deleted = await deleteInChunks(COLLECTIONS.preOrders, doomed.map((o) => o.id));
+      return {
+        ok: true,
+        deleted,
+        exportedAs: filename,
+        message: `Cleared ${deleted} ${wanted.toLowerCase()} pre-order${deleted === 1 ? '' : 's'}. Saved to ${filename}.`,
+      };
+    } catch (err) {
+      const label =
+        target === 'sales'
+          ? 'Clear old sales'
+          : `Clear ${target === 'cancelledOrders' ? 'cancelled' : 'claimed'} pre-orders`;
+      reportSyncFailure('Housekeeping', label, err);
+      const code = (err as { code?: string } | null)?.code;
+      return {
+        ok: false,
+        deleted: 0,
+        message:
+          code === 'permission-denied'
+            ? 'The database refused the delete. The updated firestore.rules have not been deployed yet — run: firebase deploy --only firestore:rules'
+            : `Could not clear the records (${code || 'unknown error'}). Your CSV was still saved, and nothing was deleted.`,
+      };
+    }
   };
 
   // Ensure active cart index is in range
@@ -1333,6 +1503,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         exportDatabaseJSON,
         importDatabaseJSON,
         resetDatabaseToDefaults,
+        purgeOldRecords,
         isJulyPeakSeasonMode,
         setIsJulyPeakSeasonMode,
         activeView,

@@ -347,23 +347,31 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                 )}
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-slate-800">Central Database Synchronization</h4>
-                  <p className="text-slate-500 mt-0.5">
-                    Unified stock sync across Casa Conching Main &amp; D&apos;Jabez Gen. Luna Branch
-                  </p>
+              {/*
+                Staff only. The Database Monitor can export every customer's name,
+                phone and email plus every sale to a file, reset the catalogue, and
+                clear old records — none of which belongs on a screen a customer can
+                reach from the public portal's Settings button.
+              */}
+              {isAdminAuthenticated && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-slate-800">Central Database Synchronization</h4>
+                    <p className="text-slate-500 mt-0.5">
+                      Unified stock sync across Casa Conching Main &amp; D&apos;Jabez Gen. Luna Branch
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsDatabaseModalOpen(true);
+                      onClose();
+                    }}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold transition cursor-pointer"
+                  >
+                    View Database Monitor
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    setIsDatabaseModalOpen(true);
-                    onClose();
-                  }}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold transition cursor-pointer"
-                >
-                  View Database Monitor
-                </button>
-              </div>
+              )}
             </div>
           )}
         </div>

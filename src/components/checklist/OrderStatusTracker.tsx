@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { usePOS } from '../../context/POSContext';
 import { CustomerPreOrder } from '../../types';
+import { filterMyOrders, readMyOrderNumbers } from '../../lib/myOrders';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
 
 interface OrderStatusTrackerProps {
@@ -34,16 +35,12 @@ export const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
   const [searchQuery, setSearchQuery] = useState(initialOrderNumber);
   const [searched, setSearched] = useState(Boolean(initialOrderNumber));
 
-  // Only show orders submitted by this specific customer / device
-  const [mySavedOrderNumbers] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('henz_my_orders_v1') || '[]');
-    } catch {
-      return [];
-    }
-  });
+  // Only show orders submitted by this specific customer / device. Read through
+  // the shared helper so the portal's tab badge and this list can never disagree
+  // about what counts as "my order".
+  const [mySavedOrderNumbers] = useState<string[]>(readMyOrderNumbers);
 
-  const myOrders = preOrders.filter((o) => mySavedOrderNumbers.includes(o.orderNumber));
+  const myOrders = filterMyOrders(preOrders, mySavedOrderNumbers);
 
   const [selectedOrder, setSelectedOrder] = useState<CustomerPreOrder | null>(() => {
     if (initialOrderNumber) {
@@ -54,14 +51,7 @@ export const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
       );
     }
     // Default to the user's most recent order if available on this device
-    const initialMyOrders = preOrders.filter((o) => {
-      try {
-        const saved = JSON.parse(localStorage.getItem('henz_my_orders_v1') || '[]');
-        return saved.includes(o.orderNumber);
-      } catch {
-        return false;
-      }
-    });
+    const initialMyOrders = filterMyOrders(preOrders);
     return initialMyOrders.length > 0 ? initialMyOrders[0] : null;
   });
 
