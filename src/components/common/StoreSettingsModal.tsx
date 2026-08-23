@@ -13,7 +13,7 @@ import {
   Smartphone,
   Save,
 } from 'lucide-react';
-import { usePOS, BRANCH_MAIN, BRANCH_USA } from '../../context/POSContext';
+import { usePOS, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
 import { getReceiptSettings, saveReceiptSettings } from '../../utils/receiptSettings';
 import { getEmailSettings, saveEmailSettings, EmailSettings } from '../../utils/emailNotifier';
 
@@ -164,7 +164,8 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-600">Casa Conching Bldg., Jalandoni St, Iloilo City</p>
+                    <p className="text-xs text-slate-600">Casa Conching Bldg., Jalandoni St, Iloilo City Proper</p>
+                    <p className="text-[11px] text-slate-500">In front of University of San Agustin Gate 5</p>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-100">
                     Warehouse hub & bulk replenishment center
@@ -172,23 +173,24 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                 </div>
 
                 <div
-                  onClick={() => setActiveBranch(BRANCH_USA)}
+                  onClick={() => setActiveBranch(BRANCH_DJABEZ)}
                   className={`p-4 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between ${
-                    activeBranch === BRANCH_USA
+                    activeBranch === BRANCH_DJABEZ
                       ? 'border-emerald-600 bg-emerald-50/60 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-slate-900">USA Branch</span>
-                      {activeBranch === BRANCH_USA && (
+                      <span className="font-bold text-sm text-slate-900">D&apos;Jabez Branch</span>
+                      {activeBranch === BRANCH_DJABEZ && (
                         <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full">
                           ACTIVE
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-600">In front of Univ. of San Agustin Gate 5 (USA Gym)</p>
+                    <p className="text-xs text-slate-600">D&apos;Jabez Bldg., 21 Gen. Luna St., Iloilo City Proper</p>
+                    <p className="text-[11px] text-slate-500">In front of the Jalandoni Flyover &amp; JD Bakeshop</p>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-100">
                     Primary medical student express retail counter
@@ -349,7 +351,7 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                 <div>
                   <h4 className="font-bold text-slate-800">Central Database Synchronization</h4>
                   <p className="text-slate-500 mt-0.5">
-                    Unified stock sync across Casa Conching Main & USA Gate 5 Branch
+                    Unified stock sync across Casa Conching Main &amp; D&apos;Jabez Gen. Luna Branch
                   </p>
                 </div>
                 <button

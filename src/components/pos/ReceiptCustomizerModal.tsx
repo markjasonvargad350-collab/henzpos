@@ -230,7 +230,7 @@ export const ReceiptCustomizerModal: React.FC<ReceiptCustomizerModalProps> = ({
               <div className="text-center pb-2 border-b border-dashed border-slate-400 space-y-0.5">
                 <p className="font-bold text-xs font-sans tracking-tight">{settings.storeHeaderTitle}</p>
                 <p className="text-[9px] text-slate-600">{settings.storeSubheader}</p>
-                <p className="text-[8.5px] text-slate-500">Main: Casa Conching • USA: Gate 5 Gym</p>
+                <p className="text-[8.5px] text-slate-500">Main: Casa Conching • D&apos;Jabez: 21 Gen. Luna St.</p>
                 {settings.showTin && <p className="text-[8px] text-slate-500">TIN: {settings.tinNumber}</p>}
                 {settings.showFdaLto && <p className="text-[8px] text-slate-500">{settings.fdaLtoNumber}</p>}
               </div>

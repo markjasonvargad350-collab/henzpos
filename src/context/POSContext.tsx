@@ -7,6 +7,7 @@ import {
   CustomerPreOrder,
   PreOrderStatus,
   BranchName,
+  BranchKey,
   StockTransferRecord,
   UnifiedDatabaseMeta,
   PresetKit,
@@ -14,12 +15,18 @@ import {
 } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { INITIAL_PREORDERS } from '../data/initialPreOrders';
-import { INITIAL_TRANSACTIONS } from '../data/initialTransactions';
 import { INITIAL_TRANSFERS } from '../data/initialTransfers';
 import { PRESET_KITS } from '../data/presetKits';
 import { soundEffects } from '../utils/audio';
 import { dateStamp, newDocId, randomCode, uniqueSerial } from '../utils/ids';
 import { db, auth, STAFF_EMAIL, testFirestoreConnection } from '../lib/firebase';
+import {
+  BRANCH_MAIN,
+  BRANCH_DJABEZ,
+  branchNameForKey,
+  branchStockField,
+  normalizeBranch,
+} from '../lib/branches';
 import {
   collection,
   doc,
@@ -40,8 +47,20 @@ import {
 export type UserRole = 'user' | 'admin';
 export type ActiveNavView = 'pos' | 'checklist-portal' | 'prep-queue' | 'inventory' | 'reports';
 
-export const BRANCH_MAIN: BranchName = 'Main Branch - Casa Conching Bldg., Jalandoni St, Iloilo City Proper';
-export const BRANCH_USA: BranchName = 'USA Branch - In front of University of San Agustin Gate 5 (USA Gym)';
+// Branch identity lives in `lib/branches` so plain utilities can resolve a branch
+// without importing this React context. Re-exported here because every screen
+// already reaches for these through usePOS's module.
+export {
+  BRANCH_MAIN,
+  BRANCH_DJABEZ,
+  BRANCH_ADDRESS,
+  BRANCH_LANDMARK,
+  normalizeBranch,
+  branchStockField,
+  branchNameForKey,
+  branchKeyFor,
+  branchShortLabel,
+} from '../lib/branches';
 
 // Firestore collection names — single source of truth (Firestore names are case-sensitive).
 // These must exactly match the collection names in firestore.rules.
@@ -129,8 +148,8 @@ interface POSContextType {
   updatePreOrderStatus: (orderId: string, status: PreOrderStatus, packedItemIds?: string[]) => void;
   transferStock: (
     productId: string,
-    from: 'main' | 'usa',
-    to: 'main' | 'usa',
+    from: BranchKey,
+    to: BranchKey,
     quantity: number,
     staffName?: string,
     notes?: string
@@ -138,7 +157,7 @@ interface POSContextType {
   restockProduct: (
     productId: string,
     quantity: number,
-    target: 'main' | 'usa',
+    target: BranchKey,
     batchNumber?: string,
     expiryDate?: string
   ) => void;
@@ -284,11 +303,11 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // serves them when offline, so we start empty and let the cache/server fill them.
   const [products, setProducts] = useState<Product[]>([]);
 
-  const [activeBranch, setActiveBranch] = useState<BranchName>(() => {
-    const saved = localStorage.getItem('henz_active_branch_v3');
-    if (saved === BRANCH_USA) return BRANCH_USA;
-    return BRANCH_MAIN;
-  });
+  const [activeBranch, setActiveBranch] = useState<BranchName>(() =>
+    // Normalized, so a register that was last used on the old "USA Branch" label
+    // reopens on the renamed branch instead of silently reverting to Main.
+    normalizeBranch(localStorage.getItem('henz_active_branch_v3'))
+  );
 
   const [heldCarts, setHeldCarts] = useState<HeldCart[]>(() => {
     const saved = localStorage.getItem('henz_held_carts_v3');
@@ -490,11 +509,17 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           { includeMetadataChanges: true },
           (snap) => {
             const list: SaleTransaction[] = [];
-            snap.forEach((d) => list.push(d.data() as SaleTransaction));
+            snap.forEach((d) => {
+              const data = d.data() as SaleTransaction;
+              list.push({ ...data, branch: normalizeBranch(data.branch) });
+            });
             list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setTransactions(list);
             markSyncState('transactions', snap);
-            seedIfEmpty('transactions', snap, COLLECTIONS.transactions, INITIAL_TRANSACTIONS);
+            // Deliberately NOT seeded. Sales are the store's real books — the
+            // owner asked for the sales report to start from zero, and seeding
+            // demo receipts here would silently re-create them the moment the
+            // collection was emptied. An empty sales report is a correct one.
           },
           (err) => console.warn('Firestore transactions listener:', err)
         )
@@ -514,7 +539,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const list: CustomerPreOrder[] = [];
             snap.forEach((d) => {
               const data = d.data() as CustomerPreOrder;
-              if (data && data.orderNumber) list.push(data);
+              if (data && data.orderNumber) {
+                list.push({ ...data, pickupBranch: normalizeBranch(data.pickupBranch) });
+              }
             });
             list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             setPreOrders(list);
@@ -533,7 +560,14 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           { includeMetadataChanges: true },
           (snap) => {
             const list: StockTransferRecord[] = [];
-            snap.forEach((d) => list.push(d.data() as StockTransferRecord));
+            snap.forEach((d) => {
+              const data = d.data() as StockTransferRecord;
+              list.push({
+                ...data,
+                fromBranch: normalizeBranch(data.fromBranch),
+                toBranch: normalizeBranch(data.toBranch),
+              });
+            });
             list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             setStockTransfers(list);
             markSyncState('stockTransfers', snap);
@@ -617,14 +651,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       {
         branchId: 'main',
         name: BRANCH_MAIN,
-        location: 'Casa Conching Bldg., Jalandoni St, Iloilo City Proper',
+        location:
+          'Casa Conching Bldg., Jalandoni St., Iloilo City Proper — in front of University of San Agustin Gate 5',
         status: 'online',
         lastSyncTime: 'Live (Synchronized)',
       },
       {
-        branchId: 'usa',
-        name: BRANCH_USA,
-        location: 'In front of University of San Agustin Gate 5 (USA Gym)',
+        branchId: 'djabez',
+        name: BRANCH_DJABEZ,
+        location:
+          "D'Jabez Bldg., 21 Gen. Luna St., Iloilo City Proper — in front of the Jalandoni Flyover & JD Bakeshop",
         status: 'online',
         lastSyncTime: 'Live (Synchronized)',
       },
@@ -640,7 +676,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const backupData = {
       meta: databaseMeta,
       exportTimestamp: new Date().toISOString(),
-      branches: [BRANCH_MAIN, BRANCH_USA],
+      branches: [BRANCH_MAIN, BRANCH_DJABEZ],
       products,
       transactions,
       preOrders,
@@ -693,7 +729,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       items.forEach((item) => setDoc(doc(db, colName, item.id), item).catch(() => {}));
     };
     writeAll(COLLECTIONS.products, INITIAL_PRODUCTS);
-    writeAll(COLLECTIONS.transactions, INITIAL_TRANSACTIONS);
+    // Sales are intentionally left alone: this button restores the *catalogue*,
+    // and re-seeding demo receipts would put fake revenue back into the report.
     writeAll(COLLECTIONS.preOrders, INITIAL_PREORDERS);
     writeAll(COLLECTIONS.stockTransfers, INITIAL_TRANSFERS);
     writeAll(COLLECTIONS.presetKits, PRESET_KITS);
@@ -883,7 +920,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Complete a Sale & Deduct Inventory in the Active Branch (Main or USA) in the 1 Unified DB
+  // Complete a Sale & Deduct Inventory in the Active Branch (Main or D'Jabez) in the 1 Unified DB
   const completeSale = (saleData: {
     customerName: string;
     customerType: HeldCart['customerType'];
@@ -952,8 +989,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Deduct stock in the active branch. increment() is atomic and race-safe
     // across terminals (and offline-compatible), so two registers selling the
     // same item never clobber each other's deduction.
-    const isUsa = activeBranch.includes('USA Branch') || activeBranch.includes('San Agustin');
-    const stockField = isUsa ? 'stockUsaBranch' : 'stockMainBranch';
+    const stockField = branchStockField(activeBranch);
 
     // Commit the whole sale atomically to Firestore: the transaction record,
     // every per-item stock deduction, and (if this cart came from a pre-order)
@@ -1094,11 +1130,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Stock Transfer between Main Branch (Casa Conching) & USA Branch (Gate 5) with Central Ledger
+  // Stock Transfer between the Main Branch (Casa Conching) and the D'Jabez
+  // Branch (Gen. Luna St.) with a central ledger entry.
   const transferStock = (
     productId: string,
-    from: 'main' | 'usa',
-    to: 'main' | 'usa',
+    from: BranchKey,
+    to: BranchKey,
     quantity: number,
     staffName = 'Staff Logistics',
     notes = 'Inter-branch rebalancing'
@@ -1107,8 +1144,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetProd = products.find((p) => p.id === productId);
     if (!targetProd) return;
 
-    const fromBranchName = from === 'main' ? BRANCH_MAIN : BRANCH_USA;
-    const toBranchName = to === 'main' ? BRANCH_MAIN : BRANCH_USA;
+    const fromBranchName = branchNameForKey(from);
+    const toBranchName = branchNameForKey(to);
 
     // Record in central transfer audit log. Like receipts, the transfer number is
     // date-stamped + random rather than `stockTransfers.length + 1`, and the
@@ -1137,8 +1174,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Inventory UI bounds `quantity` to available stock, so increment() is safe.
     const batch = writeBatch(db);
     batch.update(doc(db, COLLECTIONS.products, productId), {
-      stockMainBranch: increment(from === 'main' ? -quantity : quantity),
-      stockUsaBranch: increment(from === 'usa' ? -quantity : quantity),
+      [branchStockField(BRANCH_MAIN)]: increment(from === 'main' ? -quantity : quantity),
+      [branchStockField(BRANCH_DJABEZ)]: increment(from === 'djabez' ? -quantity : quantity),
     });
     batch.set(doc(db, COLLECTIONS.stockTransfers, transferRecord.id), transferRecord);
     batch.commit().catch((err) =>
@@ -1156,14 +1193,14 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const restockProduct = (
     productId: string,
     quantity: number,
-    target: 'main' | 'usa',
+    target: BranchKey,
     batchNumber?: string,
     expiryDate?: string
   ) => {
     const prodName = products.find((p) => p.id === productId)?.name || productId;
     try {
       updateDoc(doc(db, COLLECTIONS.products, productId), {
-        [target === 'main' ? 'stockMainBranch' : 'stockUsaBranch']: increment(quantity),
+        [branchStockField(branchNameForKey(target))]: increment(quantity),
         ...(batchNumber ? { batchNumber } : {}),
         ...(expiryDate ? { expiryDate } : {}),
       }).catch((err) => reportSyncFailure('Inventory', `Restock ${quantity}× ${prodName}`, err));

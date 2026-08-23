@@ -1,8 +1,27 @@
 export type ShelfLifeType = 'short' | 'long';
 
+/**
+ * The two physical stores. The address is part of the value because this exact
+ * string is persisted on transactions, pre-orders and stock transfers, and is
+ * printed on receipts.
+ *
+ * Main's value is deliberately left byte-for-byte as it always was: it is
+ * already stored on live pre-order and transfer documents, and rewriting it
+ * would orphan them. Only the second branch changed — it used to be labelled
+ * "USA Branch" on the belief that it sat at University of San Agustin Gate 5,
+ * but that landmark belongs to Main (Casa Conching faces it across Jalandoni
+ * St). The real second store is D'Jabez Bldg. on Gen. Luna St. `normalizeBranch`
+ * in POSContext maps the retired string forward when old documents are read.
+ */
 export type BranchName =
   | 'Main Branch - Casa Conching Bldg., Jalandoni St, Iloilo City Proper'
-  | 'USA Branch - In front of University of San Agustin Gate 5 (USA Gym)';
+  | "D'Jabez Branch - D'Jabez Bldg., 21 Gen. Luna St., Iloilo City Proper";
+
+/**
+ * Short internal handle for a branch, for props and state that only need to say
+ * "which one" (transfer direction, restock target) rather than carry the label.
+ */
+export type BranchKey = 'main' | 'djabez';
 
 export type ProductCategory =
   | 'PPE & Infection Control'
@@ -29,8 +48,17 @@ export interface Product {
   unit: string; // 'piece', 'box (100s)', 'roll', 'bottle (500ml)', 'set'
   price: number; // in PHP (₱)
   costPrice: number;
-  stockMainBranch: number; // Main Branch - Casa Conching Bldg., Jalandoni St, Iloilo City Proper
-  stockUsaBranch: number; // USA Branch - In front of University of San Agustin Gate 5 (USA Gym)
+  stockMainBranch: number; // Main Branch — Casa Conching Bldg., Jalandoni St.
+  /**
+   * Stock at the second branch (D'Jabez Bldg., 21 Gen. Luna St.).
+   *
+   * The property is still named "Usa" because that is the live Firestore field
+   * name on every product document; renaming it would mean rewriting the whole
+   * catalogue, so the name is legacy and the meaning is D'Jabez. Never infer
+   * this field from a branch label — resolve it with `branchStockField()` in
+   * POSContext, which is the single place that maps branch → field.
+   */
+  stockUsaBranch: number;
   minStockLevel: number;
   isFastMoving: boolean; // Fast moving restocked per month / daily
   shelfLifeType: ShelfLifeType; // 'short' (consumables/sterile/solutions) vs 'long' (instruments/apparatus)
@@ -58,7 +86,7 @@ export interface UnifiedDatabaseMeta {
   version: string;
   databaseId: string;
   connectedBranches: {
-    branchId: 'main' | 'usa';
+    branchId: BranchKey;
     name: BranchName;
     location: string;
     status: 'online' | 'synced';

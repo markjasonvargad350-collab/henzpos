@@ -52,7 +52,7 @@ export const SharePreOrderModal: React.FC<SharePreOrderModalProps> = ({ isOpen, 
     window.open(preOrderUrl, '_blank');
   };
 
-  const shareText = `Order your Medical Supplies & Student Duty Kits online with HENZ Health Care! Pick up at Main Branch (Jalandoni St) or USA Branch (USA Gym): ${preOrderUrl}`;
+  const shareText = `Order your Medical Supplies & Student Duty Kits online with HENZ Health Care! Pick up at our Main Branch (Jalandoni St) or D'Jabez Branch (Gen. Luna St): ${preOrderUrl}`;
 
   const handleShareMessenger = () => {
     const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(preOrderUrl)}`;
@@ -149,7 +149,7 @@ export const SharePreOrderModal: React.FC<SharePreOrderModalProps> = ({ isOpen, 
                 <span>Zero Login Required for Customers & Students</span>
               </p>
               <p>
-                Recipients get instant access to 60+ medical items, starter kits, branch selector (Main & USA), and QR pickup slips.
+                Recipients get instant access to 60+ medical items, starter kits, branch selector (Main &amp; D&apos;Jabez), and QR pickup slips.
               </p>
             </div>
           </div>

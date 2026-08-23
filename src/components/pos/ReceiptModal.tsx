@@ -15,6 +15,13 @@ import {
   Check,
 } from 'lucide-react';
 import { SaleTransaction } from '../../types';
+import {
+  BRANCH_ADDRESS,
+  BRANCH_LANDMARK,
+  branchKeyFor,
+  branchShortLabel,
+  normalizeBranch,
+} from '../../lib/branches';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
 import { getReceiptSettings, ReceiptSettings } from '../../utils/receiptSettings';
 import { ReceiptCustomizerModal } from './ReceiptCustomizerModal';
@@ -76,6 +83,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   if (!isOpen || !transaction) return null;
 
+  // Which store actually rang this up. Resolved by exact match (via
+  // `normalizeBranch`, which also folds the retired second-branch label forward)
+  // so an old receipt reprints with the correct address instead of Main's.
+  const branchKey = branchKeyFor(normalizeBranch(transaction.branch));
+
   const handleDirectPrint = async () => {
     setIsPrinting(true);
     setPrintStatusToast('Preparing thermal printer output...');
@@ -118,7 +130,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
     const itemsSummary = transaction.items.map(i => `  • ${i.quantity}x ${i.product.name} (₱${i.subtotal.toLocaleString()})`).join('\n');
     const subject = `[HENZ Health Care] Official Receipt #${transaction.receiptNumber} - ₱${transaction.grandTotal.toLocaleString()}`;
-    const body = `Dear ${transaction.customerName},\n\nThank you for your purchase at HENZ Health Care Products Trading.\n\n========================================\nOFFICIAL SALES INVOICE & RECEIPT\n========================================\nReceipt Number: ${transaction.receiptNumber}\nDate/Time: ${transaction.timestamp}\nBranch: ${transaction.branch}\nCashier: ${transaction.cashierName}\nPayment Method: ${transaction.paymentMethod}\n\nPURCHASED ITEMS:\n${itemsSummary}\n\nSubtotal: PHP ${transaction.subtotal.toLocaleString()}\nDiscount: PHP ${transaction.discountAmount.toLocaleString()}\nVAT (12% incl): PHP ${transaction.taxAmount.toLocaleString()}\nGRAND TOTAL: PHP ${transaction.grandTotal.toLocaleString()}\n\nBIR TIN: 298-410-912-000 Non-VAT Reg.\nFDA LTO No: CDRRHR-RVI-MDR-84920\n\nThank you for choosing HENZ Health Care Products Trading!\n\nCasa Conching Bldg., Jalandoni St. / USA Gate 5 Gym, Iloilo City\nSupport: +63 917 302 1995`;
+    const body = `Dear ${transaction.customerName},\n\nThank you for your purchase at HENZ Health Care Products Trading.\n\n========================================\nOFFICIAL SALES INVOICE & RECEIPT\n========================================\nReceipt Number: ${transaction.receiptNumber}\nDate/Time: ${transaction.timestamp}\nBranch: ${transaction.branch}\nCashier: ${transaction.cashierName}\nPayment Method: ${transaction.paymentMethod}\n\nPURCHASED ITEMS:\n${itemsSummary}\n\nSubtotal: PHP ${transaction.subtotal.toLocaleString()}\nDiscount: PHP ${transaction.discountAmount.toLocaleString()}\nVAT (12% incl): PHP ${transaction.taxAmount.toLocaleString()}\nGRAND TOTAL: PHP ${transaction.grandTotal.toLocaleString()}\n\nBIR TIN: 298-410-912-000 Non-VAT Reg.\nFDA LTO No: CDRRHR-RVI-MDR-84920\n\nThank you for choosing HENZ Health Care Products Trading!\n\nCasa Conching Bldg., Jalandoni St. / D'Jabez Bldg., 21 Gen. Luna St., Iloilo City\nSupport: +63 917 302 1995`;
 
     openGmailWeb(emailToUse, subject, body);
   };
@@ -276,10 +288,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 {receiptSettings.storeSubheader}
               </p>
               <p className="text-[10px] text-slate-500">
-                Branch: <strong>{transaction.branch}</strong>
+                Branch: <strong>{branchShortLabel[branchKey]}</strong>
               </p>
               <p className="text-[9px] text-slate-500">
-                📍 Casa Conching Bldg., Jalandoni St., Iloilo City Proper
+                📍 {BRANCH_ADDRESS[branchKey]}
+              </p>
+              <p className="text-[9px] text-slate-500">
+                ({BRANCH_LANDMARK[branchKey]})
               </p>
               <p className="text-[9px] text-slate-500">
                 📞 Hotline: +63 917 302 1995 / 0917-302-1995

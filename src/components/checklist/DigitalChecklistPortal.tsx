@@ -40,7 +40,7 @@ import {
   Clock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { usePOS, BRANCH_MAIN, BRANCH_USA } from '../../context/POSContext';
+import { usePOS, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
 import { CustomerPreOrder, BranchName, PresetKit } from '../../types';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
 import { PresetKitModal } from './PresetKitModal';
@@ -323,7 +323,7 @@ export const DigitalChecklistPortal: React.FC = () => {
               <span>Share Portal</span>
             </button>
             <span className="text-xs font-semibold bg-slate-900/90 text-slate-300 px-3 py-2 rounded-xl border border-slate-700 hidden sm:inline">
-              Casa Conching & USA Branch
+              Casa Conching &amp; D&apos;Jabez Branch
             </span>
           </div>
         </div>
@@ -746,23 +746,27 @@ export const DigitalChecklistPortal: React.FC = () => {
                     <Building2 className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Main Branch</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">Casa Conching Bldg., Jalandoni St, Iloilo City Proper</p>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Casa Conching Bldg., Jalandoni St, Iloilo City Proper — in front of University of San Agustin Gate 5
+                  </p>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setPickupBranch(BRANCH_USA)}
+                  onClick={() => setPickupBranch(BRANCH_DJABEZ)}
                   className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                    pickupBranch === BRANCH_USA
+                    pickupBranch === BRANCH_DJABEZ
                       ? 'border-emerald-500 bg-emerald-50 text-slate-900 font-bold ring-1 ring-emerald-500'
                       : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 text-xs font-bold">
                     <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>USA Branch</span>
+                    <span>D&apos;Jabez Branch</span>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">In front of Univ of San Agustin Gate 5 (USA Gym)</p>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    D&apos;Jabez Bldg., 21 Gen. Luna St., Iloilo City Proper — in front of the Jalandoni Flyover &amp; JD Bakeshop
+                  </p>
                 </button>
               </div>
             </div>

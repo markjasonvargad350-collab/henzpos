@@ -16,7 +16,7 @@ import {
   CloudOff,
   RefreshCw,
 } from 'lucide-react';
-import { usePOS, ActiveNavView, BRANCH_MAIN, BRANCH_USA } from '../../context/POSContext';
+import { usePOS, ActiveNavView, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
 import { StoreSettingsModal } from './StoreSettingsModal';
 
 export const HeaderNav: React.FC = () => {
@@ -64,7 +64,7 @@ export const HeaderNav: React.FC = () => {
             </div>
             <span className="text-slate-700 hidden sm:inline">•</span>
             <span className="text-slate-400 hidden md:inline text-[11px]">
-              Medical Supplies & Nursing Kits (Casa Conching & USA Gate 5)
+              Medical Supplies & Nursing Kits (Jalandoni St & Gen. Luna St)
             </span>
           </div>
 
@@ -191,7 +191,7 @@ export const HeaderNav: React.FC = () => {
                   className="text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 py-0.5 px-2 rounded-md border border-slate-200 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
                 >
                   <option value={BRANCH_MAIN}>Main Branch (Casa Conching, Jalandoni St)</option>
-                  <option value={BRANCH_USA}>USA Branch (Univ. of San Agustin Gate 5 Gym)</option>
+                  <option value={BRANCH_DJABEZ}>D'Jabez Branch (21 Gen. Luna St)</option>
                 </select>
               </div>
             </div>

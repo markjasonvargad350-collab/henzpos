@@ -20,8 +20,8 @@ import {
   AlertCircle,
   Package,
 } from 'lucide-react';
-import { usePOS, BRANCH_MAIN, BRANCH_USA } from '../../context/POSContext';
-import { Product, ProductCategory, ShelfLifeType } from '../../types';
+import { usePOS, branchShortLabel } from '../../context/POSContext';
+import { BranchKey, Product, ProductCategory, ShelfLifeType } from '../../types';
 
 export const InventoryManagement: React.FC = () => {
   const { products, transferStock, restockProduct, addProduct, updateProduct, deleteProduct, setIsDatabaseModalOpen } = usePOS();
@@ -32,15 +32,15 @@ export const InventoryManagement: React.FC = () => {
   const [onlyFastMoving, setOnlyFastMoving] = useState(false);
   const [inventoryNotice, setInventoryNotice] = useState<string | null>(null);
 
-  // Transfer modal state (between Main and USA branch)
+  // Transfer modal state (between the Main and D'Jabez branches)
   const [transferModalProduct, setTransferModalProduct] = useState<Product | null>(null);
   const [transferQty, setTransferQty] = useState<number>(10);
-  const [transferDirection, setTransferDirection] = useState<'main-to-usa' | 'usa-to-main'>('main-to-usa');
+  const [transferDirection, setTransferDirection] = useState<'main-to-djabez' | 'djabez-to-main'>('main-to-djabez');
 
   // Restock modal state
   const [restockModalProduct, setRestockModalProduct] = useState<Product | null>(null);
   const [restockQty, setRestockQty] = useState<number>(50);
-  const [restockTarget, setRestockTarget] = useState<'main' | 'usa'>('main');
+  const [restockTarget, setRestockTarget] = useState<BranchKey>('main');
   const [newBatchNo, setNewBatchNo] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
 
@@ -90,21 +90,21 @@ export const InventoryManagement: React.FC = () => {
     'Hospital & Clinic Supplies',
   ];
 
-  // Inter-branch stock rebalancing (Main Branch ⇄ USA Branch)
+  // Inter-branch stock rebalancing (Main Branch ⇄ D'Jabez Branch)
   const handleRebalanceBranches = () => {
     let transferredCount = 0;
     products.forEach((p) => {
-      // If USA Branch is low and Main branch has excess stock, transfer
+      // If D'Jabez Branch is low and Main branch has excess stock, transfer
       if (p.stockUsaBranch < p.minStockLevel && p.stockMainBranch > p.minStockLevel * 2) {
         const needed = p.minStockLevel * 2 - p.stockUsaBranch;
         const actual = Math.min(Math.floor(p.stockMainBranch / 2), needed);
         if (actual > 0) {
-          transferStock(p.id, 'main', 'usa', actual, 'Auto-Balancing Engine', 'Automated surge rebalance');
+          transferStock(p.id, 'main', 'djabez', actual, 'Auto-Balancing Engine', 'Automated surge rebalance');
           transferredCount++;
         }
       }
     });
-    setInventoryNotice(`Inter-Branch Balancing Complete: Rebalanced stock for ${transferredCount} item(s) from Main Branch to USA Branch.`);
+    setInventoryNotice(`Inter-Branch Balancing Complete: Rebalanced stock for ${transferredCount} item(s) from Main Branch to D'Jabez Branch.`);
   };
 
   const filteredProducts = products.filter((p) => {
@@ -124,10 +124,10 @@ export const InventoryManagement: React.FC = () => {
 
   const handleExecuteTransfer = () => {
     if (!transferModalProduct || transferQty <= 0) return;
-    const from = transferDirection === 'main-to-usa' ? 'main' : 'usa';
-    const to = transferDirection === 'main-to-usa' ? 'usa' : 'main';
+    const from: BranchKey = transferDirection === 'main-to-djabez' ? 'main' : 'djabez';
+    const to: BranchKey = transferDirection === 'main-to-djabez' ? 'djabez' : 'main';
     transferStock(transferModalProduct.id, from, to, transferQty, 'Store Manager', 'Manual inter-branch transfer');
-    setInventoryNotice(`Transferred ${transferQty} unit(s) of "${transferModalProduct.name}" from ${from === 'main' ? 'Main Branch' : 'USA Branch'} to ${to === 'main' ? 'Main Branch' : 'USA Branch'}.`);
+    setInventoryNotice(`Transferred ${transferQty} unit(s) of "${transferModalProduct.name}" from ${branchShortLabel[from]} to ${branchShortLabel[to]}.`);
     setTransferModalProduct(null);
   };
 
@@ -140,7 +140,7 @@ export const InventoryManagement: React.FC = () => {
       newBatchNo || undefined,
       newExpiry || undefined
     );
-    setInventoryNotice(`Restocked +${restockQty} unit(s) of "${restockModalProduct.name}" into ${restockTarget === 'main' ? 'Main Branch' : 'USA Branch'}.`);
+    setInventoryNotice(`Restocked +${restockQty} unit(s) of "${restockModalProduct.name}" into ${branchShortLabel[restockTarget]}.`);
     setRestockModalProduct(null);
   };
 
@@ -193,7 +193,8 @@ export const InventoryManagement: React.FC = () => {
 
   // Export to CSV / Excel format
   const handleExportCSV = () => {
-    const headers = 'SKU,Barcode,Product Name,Generic Name,Category,Unit,Selling Price,Cost Price,Main Branch Stock,USA Branch Stock,Total Stock,Fast Moving,Shelf Life,FDA CPR No,Batch No,Expiry Date\n';
+    const headers =
+      "SKU,Barcode,Product Name,Generic Name,Category,Unit,Selling Price,Cost Price,Main Branch Stock,D'Jabez Branch Stock,Total Stock,Fast Moving,Shelf Life,FDA CPR No,Batch No,Expiry Date\n";
     const rows = products
       .map(
         (p) =>
@@ -224,7 +225,7 @@ export const InventoryManagement: React.FC = () => {
               Medical Supplies Inventory Management (CRUD)
             </h2>
             <p className="text-xs text-slate-500">
-              Live stock across Main Branch (Jalandoni St) ⇄ USA Branch (Univ. of San Agustin Gate 5)
+              Live stock across Main Branch (Jalandoni St) ⇄ D&apos;Jabez Branch (21 Gen. Luna St)
             </p>
           </div>
         </div>
@@ -244,7 +245,7 @@ export const InventoryManagement: React.FC = () => {
           <button
             onClick={handleRebalanceBranches}
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/40 cursor-pointer"
-            title="Auto-rebalances low-stock items between Main and USA branches"
+            title="Auto-rebalances low-stock items between the Main and D'Jabez branches"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Inter-Branch Balancing</span>
@@ -301,11 +302,11 @@ export const InventoryManagement: React.FC = () => {
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs text-slate-500 font-medium">USA Branch Stock</span>
+          <span className="text-xs text-slate-500 font-medium">D&apos;Jabez Branch Stock</span>
           <div className="text-2xl font-bold text-blue-600 font-mono mt-1">
             {products.reduce((acc, p) => acc + (p.stockUsaBranch || 0), 0).toLocaleString()} units
           </div>
-          <span className="text-[11px] text-slate-500">USA Gate 5 (Gym Front)</span>
+          <span className="text-[11px] text-slate-500">D&apos;Jabez Bldg., 21 Gen. Luna St</span>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -387,7 +388,7 @@ export const InventoryManagement: React.FC = () => {
                 <th className="py-3 px-3">Category / Unit</th>
                 <th className="py-3 px-3 text-right">Price / Cost</th>
                 <th className="py-3 px-3 text-center">Main Branch</th>
-                <th className="py-3 px-3 text-center">USA Branch</th>
+                <th className="py-3 px-3 text-center">D&apos;Jabez Branch</th>
                 <th className="py-3 px-3">Batch & Expiry</th>
                 <th className="py-3 px-4 text-center">Actions & Stock</th>
               </tr>
@@ -395,7 +396,7 @@ export const InventoryManagement: React.FC = () => {
             <tbody className="divide-y divide-slate-200">
               {filteredProducts.map((p) => {
                 const isMainLow = p.stockMainBranch <= p.minStockLevel;
-                const isUsaLow = p.stockUsaBranch <= p.minStockLevel;
+                const isDjabezLow = p.stockUsaBranch <= p.minStockLevel;
 
                 return (
                   <tr key={p.id} className="hover:bg-slate-50 transition">
@@ -455,7 +456,7 @@ export const InventoryManagement: React.FC = () => {
                       </span>
                     </td>
 
-                    {/* USA Branch Stock */}
+                    {/* D'Jabez Branch Stock */}
                     <td className="py-3 px-3 text-center">
                       <span
                         className={`inline-block px-2 py-0.5 rounded font-bold font-mono text-xs border ${
@@ -463,7 +464,7 @@ export const InventoryManagement: React.FC = () => {
                             ? 'bg-rose-600 text-white border-rose-700'
                             : p.stockUsaBranch === 0
                             ? 'bg-rose-100 text-rose-700 border-rose-200'
-                            : isUsaLow
+                            : isDjabezLow
                             ? 'bg-amber-100 text-amber-700 border-amber-200'
                             : 'bg-blue-100 text-blue-700 border-blue-200'
                         }`}
@@ -492,7 +493,7 @@ export const InventoryManagement: React.FC = () => {
                             setTransferQty(Math.min(10, Math.max(p.stockMainBranch, p.stockUsaBranch)));
                           }}
                           className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition border border-slate-200 cursor-pointer"
-                          title="Transfer between Main Branch and USA Branch"
+                          title="Transfer between the Main and D'Jabez branches"
                         >
                           <ArrowLeftRight className="w-3.5 h-3.5 text-emerald-600" />
                         </button>
@@ -534,7 +535,7 @@ export const InventoryManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Stock Transfer Modal (Main Branch ⇄ USA Branch) */}
+      {/* Stock Transfer Modal (Main Branch ⇄ D'Jabez Branch) */}
       {transferModalProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
           <div className="bg-white text-slate-800 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-5 space-y-4">
@@ -549,7 +550,7 @@ export const InventoryManagement: React.FC = () => {
               <p className="text-xs font-bold text-slate-900">{transferModalProduct.name}</p>
               <div className="flex justify-between text-xs text-slate-500 mt-1">
                 <span>Main Branch: <strong className="text-emerald-600 font-mono">{transferModalProduct.stockMainBranch}</strong></span>
-                <span>USA Branch: <strong className="text-blue-600 font-mono">{transferModalProduct.stockUsaBranch}</strong></span>
+                <span>D&apos;Jabez Branch: <strong className="text-blue-600 font-mono">{transferModalProduct.stockUsaBranch}</strong></span>
               </div>
             </div>
 
@@ -558,25 +559,25 @@ export const InventoryManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setTransferDirection('main-to-usa')}
+                  onClick={() => setTransferDirection('main-to-djabez')}
                   className={`p-2.5 text-xs font-bold rounded-xl border text-left cursor-pointer transition ${
-                    transferDirection === 'main-to-usa'
+                    transferDirection === 'main-to-djabez'
                       ? 'border-emerald-500 bg-emerald-50 text-slate-900 ring-1 ring-emerald-500'
                       : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
                   }`}
                 >
-                  Main Branch → USA Branch
+                  Main Branch → D&apos;Jabez Branch
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTransferDirection('usa-to-main')}
+                  onClick={() => setTransferDirection('djabez-to-main')}
                   className={`p-2.5 text-xs font-bold rounded-xl border text-left cursor-pointer transition ${
-                    transferDirection === 'usa-to-main'
+                    transferDirection === 'djabez-to-main'
                       ? 'border-emerald-500 bg-emerald-50 text-slate-900 ring-1 ring-emerald-500'
                       : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
                   }`}
                 >
-                  USA Branch → Main Branch
+                  D&apos;Jabez Branch → Main Branch
                 </button>
               </div>
             </div>
@@ -586,7 +587,7 @@ export const InventoryManagement: React.FC = () => {
               <input
                 type="number"
                 min={1}
-                max={transferDirection === 'main-to-usa' ? transferModalProduct.stockMainBranch : transferModalProduct.stockUsaBranch}
+                max={transferDirection === 'main-to-djabez' ? transferModalProduct.stockMainBranch : transferModalProduct.stockUsaBranch}
                 value={transferQty}
                 onChange={(e) => setTransferQty(parseInt(e.target.value) || 0)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-xl font-bold font-mono focus:outline-none focus:border-emerald-500"
@@ -636,7 +637,7 @@ export const InventoryManagement: React.FC = () => {
                   className="w-full px-2.5 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
                 >
                   <option value="main">Main Branch (Jalandoni St)</option>
-                  <option value="usa">USA Branch (Gate 5 Gym)</option>
+                  <option value="djabez">D&apos;Jabez Branch (21 Gen. Luna St)</option>
                 </select>
               </div>
 
@@ -810,7 +811,7 @@ export const InventoryManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">USA Branch Stock</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">D&apos;Jabez Branch Stock</label>
                   <input
                     type="number"
                     value={editingProduct.stockUsaBranch}
@@ -911,7 +912,7 @@ export const InventoryManagement: React.FC = () => {
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1 text-xs">
               <div className="font-bold text-slate-900">{productToDelete.name}</div>
               <div className="text-slate-500 font-mono">SKU: {productToDelete.sku} | Barcode: {productToDelete.barcode}</div>
-              <div className="text-slate-500">Main Stock: {productToDelete.stockMainBranch} | USA Stock: {productToDelete.stockUsaBranch}</div>
+              <div className="text-slate-500">Main Stock: {productToDelete.stockMainBranch} | D&apos;Jabez Stock: {productToDelete.stockUsaBranch}</div>
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
@@ -1057,7 +1058,7 @@ export const InventoryManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Initial USA Branch Stock</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Initial D&apos;Jabez Branch Stock</label>
                   <input
                     type="number"
                     value={newProdData.stockUsaBranch}

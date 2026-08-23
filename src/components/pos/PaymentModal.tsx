@@ -16,7 +16,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { usePOS } from '../../context/POSContext';
+import { usePOS, branchStockField } from '../../context/POSContext';
 import { PaymentMethod, SaleTransaction } from '../../types';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
 
@@ -69,12 +69,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // empty cart — so a cart could be checked out for more units than exist and
   // increment(-qty) would quietly drive the count negative. That is easy to do
   // offline, where the cached stock figure may be hours stale.
-  const isUsaBranch =
-    activeBranch.includes('USA Branch') || activeBranch.includes('San Agustin');
+  //
+  // The field is resolved by the same helper `completeSale` uses, so the stock
+  // this checks is always the stock that actually gets deducted.
+  const stockField = branchStockField(activeBranch);
   const stockShortfalls = currentCart.items
     .map((item) => {
       const live = products.find((p) => p.id === item.product.id);
-      const available = live ? (isUsaBranch ? live.stockUsaBranch : live.stockMainBranch) : 0;
+      const available = live ? live[stockField] : 0;
       return { name: item.product.name, unit: item.product.unit, requested: item.quantity, available };
     })
     .filter((s) => s.requested > s.available);

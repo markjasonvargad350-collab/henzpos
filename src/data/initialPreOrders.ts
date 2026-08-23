@@ -50,7 +50,7 @@ export const INITIAL_PREORDERS: CustomerPreOrder[] = [
     schoolOrClinic: 'Villanueva Community Health Clinic - Pavia',
     contactNumber: '+63 928 411 9022',
     email: 'dr.arthur@paviaph.com',
-    pickupBranch: 'USA Branch - In front of University of San Agustin Gate 5 (USA Gym)',
+    pickupBranch: "D'Jabez Branch - D'Jabez Bldg., 21 Gen. Luna St., Iloilo City Proper",
     targetPickupDate: '2026-08-17',
     items: [
       { productId: 'prod-001', productName: 'Examination Latex Gloves Powder-Free (Medium)', barcode: '480651234001', quantity: 5, unitPrice: 240, unit: 'box (100s)' },

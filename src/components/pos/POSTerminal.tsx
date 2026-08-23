@@ -12,7 +12,7 @@ import {
   Package,
   CheckCircle2,
 } from 'lucide-react';
-import { usePOS } from '../../context/POSContext';
+import { usePOS, branchStockField } from '../../context/POSContext';
 import { Product, SaleTransaction } from '../../types';
 import { MultiCartTabs } from './MultiCartTabs';
 import { QuickKitSelector } from './QuickKitSelector';
@@ -186,7 +186,9 @@ export const POSTerminal: React.FC = () => {
     }
   };
 
-  const isMainBranch = activeBranch.includes('Main Branch');
+  // Resolved by the same helper the sale itself uses, so the number on the tile
+  // is the number that will be deducted.
+  const stockField = branchStockField(activeBranch);
 
   // Filter products
   const filteredProducts = products.filter((p) => {
@@ -302,7 +304,7 @@ export const POSTerminal: React.FC = () => {
           {/* Clean Medical Product Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1">
             {filteredProducts.map((p) => {
-              const currentStock = isMainBranch ? p.stockMainBranch : p.stockUsaBranch;
+              const currentStock = p[stockField];
               const isLowStock = currentStock <= p.minStockLevel;
 
               return (

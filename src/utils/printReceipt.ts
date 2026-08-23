@@ -1,6 +1,30 @@
 import QRCode from 'qrcode';
 import { SaleTransaction } from '../types';
 import { getReceiptSettings, ReceiptSettings } from './receiptSettings';
+import {
+  BRANCH_ADDRESS,
+  BRANCH_LANDMARK,
+  branchKeyFor,
+  branchShortLabel,
+  normalizeBranch,
+} from '../lib/branches';
+
+/**
+ * Address block for the branch that rang up the sale.
+ *
+ * The receipt used to hard-code Casa Conching's address on every copy, so a
+ * sale rung up at the second branch printed the wrong location — directly under
+ * a Branch line that said otherwise. BIR-facing paperwork has to name the store
+ * that actually made the sale.
+ */
+const branchLines = (transaction: SaleTransaction) => {
+  const key = branchKeyFor(normalizeBranch(transaction.branch));
+  return {
+    label: branchShortLabel[key],
+    address: BRANCH_ADDRESS[key],
+    landmark: BRANCH_LANDMARK[key],
+  };
+};
 
 /**
  * Generates clean, standalone thermal/invoice HTML with self-contained styles.
@@ -23,6 +47,7 @@ export async function generateReceiptHTML(
     }
   }
 
+  const branch = branchLines(transaction);
   const is58mm = settings.paperWidth === '58mm';
   const isA4 = settings.paperWidth === 'A4';
   const paperMaxWidth = is58mm ? '48mm' : isA4 ? '190mm' : '72mm';
@@ -119,8 +144,9 @@ export async function generateReceiptHTML(
   <div class="text-center border-bottom">
     <div class="header-title">🩺 ${settings.storeHeaderTitle}</div>
     <div class="sub-info">${settings.storeSubheader}</div>
-    <div class="sub-info">Branch: <strong>${transaction.branch}</strong></div>
-    <div class="sub-info">📍 Casa Conching Bldg., Jalandoni St., Iloilo City Proper</div>
+    <div class="sub-info">Branch: <strong>${branch.label}</strong></div>
+    <div class="sub-info">📍 ${branch.address}</div>
+    <div class="sub-info">(${branch.landmark})</div>
     <div class="sub-info">📞 +63 917 302 1995 / 0917-302-1995</div>
     ${settings.showTin ? `<div class="sub-info">TIN: <strong>${settings.tinNumber}</strong></div>` : ''}
     ${settings.showFdaLto ? `<div class="sub-info">FDA LTO: <strong>${settings.fdaLtoNumber}</strong></div>` : ''}
@@ -329,12 +355,14 @@ export async function downloadReceiptFile(
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } else {
+    const branch = branchLines(transaction);
     const textLines = [
       `================================================`,
       `  ${settings.storeHeaderTitle}`,
       `  ${settings.storeSubheader}`,
-      `  Branch: ${transaction.branch}`,
-      `  📍 Casa Conching Bldg., Jalandoni St., Iloilo City`,
+      `  Branch: ${branch.label}`,
+      `  📍 ${branch.address}`,
+      `  (${branch.landmark})`,
       `  📞 +63 917 302 1995`,
       settings.showTin ? `  TIN: ${settings.tinNumber}` : '',
       settings.showFdaLto ? `  FDA LTO: ${settings.fdaLtoNumber}` : '',

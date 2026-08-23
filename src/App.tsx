@@ -79,7 +79,7 @@ const MainLayout: React.FC = () => {
             <span>Medical Supplies & Nursing Duty Kits</span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-500 justify-center">
-            <span>Main (Casa Conching, Jalandoni St) & USA (Univ. of San Agustin Gate 5)</span>
+            <span>Main (Casa Conching, Jalandoni St) &amp; D&apos;Jabez (21 Gen. Luna St)</span>
             <span>•</span>
             <span className="text-emerald-700 font-semibold">FDA Regulatory Compliant</span>
           </div>

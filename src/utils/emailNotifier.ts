@@ -2,6 +2,7 @@
  * HENZ Health Care Products Trading - Customer Email Dispatch Engine
  * Supports Order Confirmations, "Ready for Pickup" Notifications, and Official Digital Receipts.
  */
+import { BRANCH_DJABEZ, normalizeBranch } from '../lib/branches';
 
 export interface EmailSettings {
   enabled: boolean;
@@ -95,13 +96,20 @@ export function generatePickupEmailContent(
   totalAmount: number,
   items?: { productName: string; quantity: number; unit?: string }[]
 ): { subject: string; body: string; htmlBody: string } {
-  const isUsa = pickupBranch.toLowerCase().includes('usa');
-  const branchName = isUsa ? 'USA Branch (USA Gate 5 Gym)' : 'Main Branch (Casa Conching Bldg.)';
-  const branchAddress = isUsa
-    ? 'In front of University of San Agustin Gate 5 (USA Gym), Gen. Luna St., Iloilo City'
-    : 'Casa Conching Bldg., Jalandoni St., Iloilo City Proper';
+  // Exact match, not a substring sniff. This used to test for "usa", which the
+  // Main branch's own address now contains (it faces University of San Agustin
+  // Gate 5) — that would have emailed customers the wrong pickup address and the
+  // wrong hotline. `normalizeBranch` also folds the retired second-branch label
+  // forward, so orders placed before the rename still address correctly.
+  const isDjabez = normalizeBranch(pickupBranch) === BRANCH_DJABEZ;
+  const branchName = isDjabez
+    ? "D'Jabez Branch (D'Jabez Bldg., 21 Gen. Luna St.)"
+    : 'Main Branch (Casa Conching Bldg.)';
+  const branchAddress = isDjabez
+    ? "D'Jabez Bldg., 21 Gen. Luna St., Iloilo City Proper — in front of the Jalandoni Flyover & JD Bakeshop"
+    : 'Casa Conching Bldg., Jalandoni St., Iloilo City Proper — in front of University of San Agustin Gate 5';
   const branchHours = 'Mon - Sat: 8:00 AM - 6:00 PM';
-  const hotline = isUsa ? '(033) 330-4589 / 0917-882-4369' : '(033) 320-1928 / 0917-554-1290';
+  const hotline = isDjabez ? '(033) 330-4589 / 0917-882-4369' : '(033) 320-1928 / 0917-554-1290';
 
   const itemsListText = items && items.length > 0
     ? items.map(i => `  • ${i.quantity}x ${i.productName}`).join('\n')

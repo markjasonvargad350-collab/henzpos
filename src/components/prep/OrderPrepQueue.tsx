@@ -22,7 +22,7 @@ import {
   XCircle,
   RotateCcw,
 } from 'lucide-react';
-import { usePOS } from '../../context/POSContext';
+import { usePOS, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
 import { CustomerPreOrder, PreOrderStatus } from '../../types';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
 import {
@@ -52,8 +52,8 @@ export const OrderPrepQueue: React.FC = () => {
 
     const matchesBranch =
       selectedBranchFilter === 'All' ||
-      (selectedBranchFilter === 'Main' && order.pickupBranch.includes('Main Branch')) ||
-      (selectedBranchFilter === 'USA' && order.pickupBranch.includes('USA Branch'));
+      (selectedBranchFilter === 'Main' && order.pickupBranch === BRANCH_MAIN) ||
+      (selectedBranchFilter === 'DJabez' && order.pickupBranch === BRANCH_DJABEZ);
 
     return matchesSearch && matchesBranch;
   });
@@ -244,14 +244,14 @@ export const OrderPrepQueue: React.FC = () => {
               Main Branch
             </button>
             <button
-              onClick={() => setSelectedBranchFilter('USA')}
+              onClick={() => setSelectedBranchFilter('DJabez')}
               className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
-                selectedBranchFilter === 'USA'
+                selectedBranchFilter === 'DJabez'
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              USA Branch (Gym)
+              D&apos;Jabez Branch
             </button>
           </div>
         </div>
