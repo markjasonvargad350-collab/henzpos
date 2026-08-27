@@ -21,6 +21,7 @@ import { PendingPreOrdersDrawer } from './PendingPreOrdersDrawer';
 import { PaymentModal } from './PaymentModal';
 import { ReceiptModal } from './ReceiptModal';
 import { soundEffects } from '../../utils/audio';
+import { findPreOrderByCode, findProductByCode } from '../../lib/scanMatch';
 
 export const POSTerminal: React.FC = () => {
   const {
@@ -110,12 +111,9 @@ export const POSTerminal: React.FC = () => {
         if (buffer.length >= 3) {
           const scannedCode = buffer.trim();
           
-          // Check if pre-order ref (scanned QR encodes qrCodeValue; also accept order number)
-          const matchPO = preOrders.find(
-            (po) =>
-              (po.qrCodeValue || '').toLowerCase() === scannedCode.toLowerCase() ||
-              (po.orderNumber || '').toLowerCase() === scannedCode.toLowerCase()
-          );
+          // Check if pre-order ref (QR pass, order number, or internal id) —
+          // resolved by the same helper the camera scanner uses.
+          const matchPO = findPreOrderByCode(preOrders, scannedCode);
           if (matchPO) {
             e.preventDefault();
             loadPreOrderIntoCart(matchPO.id);
@@ -125,11 +123,7 @@ export const POSTerminal: React.FC = () => {
           }
 
           // Check product
-          const match = products.find(
-            (p) =>
-              p.barcode === scannedCode ||
-              p.sku.toLowerCase() === scannedCode.toLowerCase()
-          );
+          const match = findProductByCode(products, scannedCode);
 
           if (match) {
             e.preventDefault();
@@ -158,12 +152,7 @@ export const POSTerminal: React.FC = () => {
     if (!query) return;
 
     // Check if pre-order ref (typed order number, QR value, or internal id)
-    const matchPO = preOrders.find(
-      (po) =>
-        (po.orderNumber || '').toLowerCase() === query.toLowerCase() ||
-        (po.qrCodeValue || '').toLowerCase() === query.toLowerCase() ||
-        po.id.toLowerCase() === query.toLowerCase()
-    );
+    const matchPO = findPreOrderByCode(preOrders, query);
     if (matchPO) {
       loadPreOrderIntoCart(matchPO.id);
       soundEffects.playSuccessPayment();
@@ -171,12 +160,11 @@ export const POSTerminal: React.FC = () => {
       return;
     }
 
-    const match = products.find(
-      (p) =>
-        p.barcode === query ||
-        p.sku.toLowerCase() === query.toLowerCase() ||
-        p.name.toLowerCase().includes(query.toLowerCase())
-    );
+    // Exact barcode/SKU first (shared with the scanner), then fall back to a
+    // fuzzy name match since this box doubles as a typed product search.
+    const match =
+      findProductByCode(products, query) ||
+      products.find((p) => p.name.toLowerCase().includes(query.toLowerCase()));
 
     if (match) {
       addToCart(match, 1);
