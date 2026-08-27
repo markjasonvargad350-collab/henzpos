@@ -16,9 +16,17 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
 import { usePOS, ActiveNavView, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
 import { StoreSettingsModal } from './StoreSettingsModal';
+
+type NavItem = {
+  id: ActiveNavView;
+  label: string;
+  icon: React.FC<{ className?: string }>;
+  badge?: number;
+};
 
 export const HeaderNav: React.FC = () => {
   const {
@@ -26,6 +34,8 @@ export const HeaderNav: React.FC = () => {
     setUserRole,
     isAdminAuthenticated,
     setIsAdminLoginModalOpen,
+    setIsAdminUnlockModalOpen,
+    lockAdmin,
     setIsShareModalOpen,
     logoutAdmin,
     activeView,
@@ -45,14 +55,20 @@ export const HeaderNav: React.FC = () => {
     (p) => p.orderStatus === 'Pending' || p.orderStatus === 'Preparing'
   ).length;
 
-  const adminNavItems: { id: ActiveNavView; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
+  // Limited staff tier: register, pre-orders, prep desk, scanner, inventory.
+  const staffNavItems: NavItem[] = [
     { id: 'pos', label: 'Cashier Register', icon: CreditCard, badge: heldCarts.length > 1 ? heldCarts.length : undefined },
     { id: 'checklist-portal', label: 'Pre-Order Portal', icon: ClipboardList },
     { id: 'prep-queue', label: 'Prep Desk', icon: PackageCheck, badge: pendingPreOrdersCount > 0 ? pendingPreOrdersCount : undefined },
     { id: 'inventory', label: 'Inventory & Expiry', icon: Boxes },
+  ];
+  // Full admin only.
+  const adminOnlyNavItems: NavItem[] = [
     { id: 'reports', label: 'Sales & Reports', icon: BarChart3 },
     { id: 'forecast', label: 'Demand Forecast', icon: TrendingUp },
   ];
+  const navItems: NavItem[] =
+    userRole === 'admin' ? [...staffNavItems, ...adminOnlyNavItems] : staffNavItems;
 
   return (
     <>
@@ -129,32 +145,20 @@ export const HeaderNav: React.FC = () => {
               <span className="hidden sm:inline">Share Portal</span>
             </button>
 
-            {/* Store & POS Settings */}
-            <button
-              onClick={() => setIsSettingsModalOpen(true)}
-              className="flex items-center gap-1 text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 transition cursor-pointer font-medium"
-              title="Branch, Receipt & Cloud Settings"
-            >
-              <Settings className="w-3 h-3 text-emerald-400" />
-              <span>Settings</span>
-            </button>
+            {/* Store & POS Settings — admin only */}
+            {userRole === 'admin' && (
+              <button
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="flex items-center gap-1 text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 transition cursor-pointer font-medium"
+                title="Branch, Receipt & Cloud Settings"
+              >
+                <Settings className="w-3 h-3 text-emerald-400" />
+                <span>Settings</span>
+              </button>
+            )}
 
-            {/* Role Switcher / Admin Login */}
-            {isAdminAuthenticated ? (
-              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-700">
-                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/90 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                  Staff Active
-                </span>
-                <button
-                  onClick={logoutAdmin}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-950/70 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-600/40 transition cursor-pointer"
-                  title="Log out of Staff Mode"
-                >
-                  <LogOut className="w-3 h-3" />
-                  <span>Exit</span>
-                </button>
-              </div>
-            ) : (
+            {/* Auth state: signed-out → Staff Login; staff → Unlock Admin; admin → Lock */}
+            {!isAdminAuthenticated ? (
               <button
                 onClick={() => setIsAdminLoginModalOpen(true)}
                 className="flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer"
@@ -163,6 +167,47 @@ export const HeaderNav: React.FC = () => {
                 <Lock className="w-3 h-3" />
                 <span>Staff Login</span>
               </button>
+            ) : (
+              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-700">
+                {userRole === 'admin' ? (
+                  <>
+                    <span className="text-[10px] font-bold text-indigo-200 bg-indigo-950/90 px-1.5 py-0.5 rounded border border-indigo-400/40 flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      Admin
+                    </span>
+                    <button
+                      onClick={lockAdmin}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600/50 transition cursor-pointer"
+                      title="Lock admin — step back to limited staff access"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Lock</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/90 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                      Staff
+                    </span>
+                    <button
+                      onClick={() => setIsAdminUnlockModalOpen(true)}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition cursor-pointer"
+                      title="Unlock full admin access with the admin code"
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>Unlock Admin</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={logoutAdmin}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-950/70 hover:bg-rose-900 text-rose-300 hover:text-white border border-rose-600/40 transition cursor-pointer"
+                  title="Sign out of this device"
+                >
+                  <LogOut className="w-3 h-3" />
+                  <span>Exit</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -216,7 +261,7 @@ export const HeaderNav: React.FC = () => {
             </div>
           ) : (
             <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-              {adminNavItems.map((item) => {
+              {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeView === item.id;
                 return (

@@ -12,10 +12,14 @@ import {
   Shield,
   Smartphone,
   Save,
+  KeyRound,
+  Copy,
+  ShieldCheck,
 } from 'lucide-react';
 import { usePOS, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
 import { getReceiptSettings, saveReceiptSettings } from '../../utils/receiptSettings';
 import { getEmailSettings, saveEmailSettings, EmailSettings } from '../../utils/emailNotifier';
+import { hashAdminCode } from '../../lib/adminCode';
 
 interface StoreSettingsModalProps {
   isOpen: boolean;
@@ -29,6 +33,9 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
     activeBranch,
     setActiveBranch,
     isAdminAuthenticated,
+    userRole,
+    changeAdminCode,
+    isAdminCodeConfigured,
     logoutAdmin,
     databaseMeta,
     setIsDatabaseModalOpen,
@@ -39,7 +46,58 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
   const [emailConfig, setEmailConfigState] = useState<EmailSettings>(getEmailSettings);
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
+  // Admin-code management (system tab, admin only). The code is stored only as a
+  // SHA-256 hash on this device — see src/lib/adminCode.ts. currentCode is required
+  // only when a code already exists (rotating it); the first-time set skips it.
+  const codeAlreadySet = isAdminCodeConfigured();
+  const [currentCode, setCurrentCode] = useState('');
+  const [newCode, setNewCode] = useState('');
+  const [confirmCode, setConfirmCode] = useState('');
+  const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [savedHash, setSavedHash] = useState('');
+  const [hashCopied, setHashCopied] = useState(false);
+
   if (!isOpen) return null;
+
+  const handleChangeAdminCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCodeMsg(null);
+    setSavedHash('');
+    setHashCopied(false);
+    const next = newCode.trim();
+    if (next !== confirmCode.trim()) {
+      setCodeMsg({ ok: false, text: 'The new code and its confirmation do not match.' });
+      return;
+    }
+    const result = await changeAdminCode(currentCode.trim(), next);
+    if (!result.ok) {
+      setCodeMsg({ ok: false, text: result.message || 'Could not update the admin code.' });
+      return;
+    }
+    // Re-derive the stored hash so the owner can optionally bake it into the
+    // deployment config for a store-wide default (see note below the form).
+    const hash = await hashAdminCode(next);
+    setSavedHash(hash);
+    setCodeMsg({
+      ok: true,
+      text: codeAlreadySet
+        ? 'Admin code changed on this device.'
+        : 'Admin code set on this device. You now have full admin access.',
+    });
+    setCurrentCode('');
+    setNewCode('');
+    setConfirmCode('');
+  };
+
+  const copyHash = async () => {
+    try {
+      await navigator.clipboard.writeText(savedHash);
+      setHashCopied(true);
+      setTimeout(() => setHashCopied(false), 2000);
+    } catch {
+      /* clipboard may be blocked; the hash is still shown for manual copy */
+    }
+  };
 
   const handleSaveReceipt = (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,13 +381,28 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
             <div className="space-y-4 text-xs">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800">Admin Authentication Status</span>
-                  <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                    {isAdminAuthenticated ? 'Logged In as Admin / Staff' : 'Guest View'}
+                  <span className="font-bold text-slate-800">Access Level</span>
+                  <span
+                    className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      userRole === 'admin'
+                        ? 'bg-indigo-100 text-indigo-800'
+                        : isAdminAuthenticated
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {userRole === 'admin'
+                      ? 'Admin — full access'
+                      : isAdminAuthenticated
+                      ? 'Staff — limited'
+                      : 'Guest View'}
                   </span>
                 </div>
                 <p className="text-slate-500">
-                  Cashiers sign in with the shared staff account (one secure password for the whole store). Contact the store owner to change it.
+                  Everyone signs in with the shared staff account for limited access (register,
+                  pre-orders, prep desk, inventory). Full admin access — reports, forecast, this
+                  Settings panel and the database monitor — is unlocked separately with the admin
+                  code below.
                 </p>
                 {isAdminAuthenticated && (
                   <div className="pt-2">
@@ -341,19 +414,125 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                       className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      <span>Log Out of Admin Mode</span>
+                      <span>Sign Out of This Device</span>
                     </button>
                   </div>
                 )}
               </div>
 
+              {/* Admin access code — set or rotate the second gate that unlocks full
+                  admin. Stored only as a SHA-256 hash on this device (localStorage);
+                  the plain code is never persisted. Admin only. */}
+              {userRole === 'admin' && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                  <div>
+                    <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <KeyRound className="w-4 h-4 text-indigo-600" />
+                      Admin Access Code
+                    </h4>
+                    <p className="text-slate-500 mt-0.5">
+                      {codeAlreadySet
+                        ? 'Enter the current code, then choose a new one to rotate it on this device.'
+                        : 'No admin code is set on this device yet. Create one to control who can unlock full admin access.'}
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleChangeAdminCode} className="space-y-2">
+                    {codeAlreadySet && (
+                      <input
+                        type="password"
+                        value={currentCode}
+                        onChange={(e) => setCurrentCode(e.target.value)}
+                        placeholder="Current admin code"
+                        autoComplete="off"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    )}
+                    <input
+                      type="password"
+                      value={newCode}
+                      onChange={(e) => setNewCode(e.target.value)}
+                      placeholder="New admin code (min 4 characters)"
+                      autoComplete="new-password"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      type="password"
+                      value={confirmCode}
+                      onChange={(e) => setConfirmCode(e.target.value)}
+                      placeholder="Confirm new admin code"
+                      autoComplete="new-password"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    />
+
+                    {codeMsg && (
+                      <div
+                        className={`p-2.5 rounded-lg flex items-center gap-2 font-medium ${
+                          codeMsg.ok
+                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                            : 'bg-rose-50 border border-rose-200 text-rose-700'
+                        }`}
+                      >
+                        {codeMsg.ok ? (
+                          <ShieldCheck className="w-4 h-4 shrink-0" />
+                        ) : (
+                          <Lock className="w-4 h-4 shrink-0" />
+                        )}
+                        <span>{codeMsg.text}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      <span>{codeAlreadySet ? 'Change Admin Code' : 'Set Admin Code'}</span>
+                    </button>
+                  </form>
+
+                  {savedHash && (
+                    <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                      <p className="text-slate-500">
+                        Optional — to make this the same code on <b>every</b> device, paste this
+                        hash into <code className="bg-slate-200 px-1 rounded">adminCodeHash</code> in{' '}
+                        <code className="bg-slate-200 px-1 rounded">firebase-applet-config.json</code>{' '}
+                        and redeploy. Otherwise it stays on this device only.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 truncate bg-white border border-slate-200 rounded-lg px-2 py-1.5 font-mono text-[11px] text-slate-700">
+                          {savedHash}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={copyHash}
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                        >
+                          {hashCopied ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/*
-                Staff only. The Database Monitor can export every customer's name,
+                Admin only. The Database Monitor can export every customer's name,
                 phone and email plus every sale to a file, reset the catalogue, and
-                clear old records — none of which belongs on a screen a customer can
-                reach from the public portal's Settings button.
+                clear old records — none of which belongs on a screen a customer or
+                limited staff can reach.
               */}
-              {isAdminAuthenticated && (
+              {userRole === 'admin' && (
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
                   <div>
                     <h4 className="font-bold text-slate-800">Central Database Synchronization</h4>

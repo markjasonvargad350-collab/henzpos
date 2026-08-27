@@ -43,7 +43,7 @@ export const UnifiedDatabaseModal: React.FC = () => {
     importDatabaseJSON,
     resetDatabaseToDefaults,
     purgeOldRecords,
-    isAdminAuthenticated,
+    userRole,
   } = usePOS();
 
   const [activeTab, setActiveTab] = useState<'architecture' | 'transfers' | 'backup'>('architecture');
@@ -58,11 +58,11 @@ export const UnifiedDatabaseModal: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isDatabaseModalOpen) return null;
-  // Staff only, checked here as well as at the door in StoreSettingsModal. This
+  // Admin only, checked here as well as at the door in StoreSettingsModal. This
   // screen exports the full customer list and every sale, resets the catalogue,
-  // and deletes old records — a customer must never render it, whichever caller
-  // opened it.
-  if (!isAdminAuthenticated) return null;
+  // and deletes old records — neither a customer nor limited staff may render it,
+  // whichever caller opened it.
+  if (userRole !== 'admin') return null;
 
   // Calculate live database metrics
   const mainStockTotal = products.reduce((acc, p) => acc + p.stockMainBranch, 0);

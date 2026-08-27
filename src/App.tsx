@@ -13,6 +13,7 @@ import { InventoryManagement } from './components/inventory/InventoryManagement'
 import { ReportsView } from './components/reports/ReportsView';
 import { DemandForecast } from './components/forecast/DemandForecast';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
+import { AdminUnlockModal } from './components/admin/AdminUnlockModal';
 import { PWAStatusToast } from './components/common/PWAStatusToast';
 import { SharePreOrderModal } from './components/common/SharePreOrderModal';
 import { SyncFailureBanner } from './components/common/SyncFailureBanner';
@@ -24,6 +25,8 @@ const MainLayout: React.FC = () => {
     userRole,
     isAdminLoginModalOpen,
     setIsAdminLoginModalOpen,
+    isAdminUnlockModalOpen,
+    setIsAdminUnlockModalOpen,
     isShareModalOpen,
     setIsShareModalOpen,
   } = usePOS();
@@ -45,8 +48,10 @@ const MainLayout: React.FC = () => {
             {activeView === 'checklist-portal' && <DigitalChecklistPortal />}
             {activeView === 'prep-queue' && <OrderPrepQueue />}
             {activeView === 'inventory' && <InventoryManagement />}
-            {activeView === 'reports' && <ReportsView />}
-            {activeView === 'forecast' && <DemandForecast />}
+            {/* Sales & Reports and Demand Forecast are admin-only (staff never
+                see the nav entries; guarded here so a URL/state can't reach them). */}
+            {activeView === 'reports' && userRole === 'admin' && <ReportsView />}
+            {activeView === 'forecast' && userRole === 'admin' && <DemandForecast />}
           </>
         )}
       </main>
@@ -55,6 +60,12 @@ const MainLayout: React.FC = () => {
       <AdminLoginModal
         isOpen={isAdminLoginModalOpen}
         onClose={() => setIsAdminLoginModalOpen(false)}
+      />
+
+      {/* Staff → Admin elevation (in-app admin code) */}
+      <AdminUnlockModal
+        isOpen={isAdminUnlockModalOpen}
+        onClose={() => setIsAdminUnlockModalOpen(false)}
       />
 
       {/* Share Pre-Order Portal Link Modal */}

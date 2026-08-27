@@ -47,9 +47,26 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from 'firebase/auth';
+import {
+  verifyAdminCode,
+  setLocalAdminCode,
+  isAdminCodeConfigured as adminCodeIsConfigured,
+} from '../lib/adminCode';
 
-export type UserRole = 'user' | 'admin';
+/**
+ * Three access tiers:
+ *  - 'user'  — anonymous customer (public pre-order portal only).
+ *  - 'staff' — signed in with the shared staff account: limited workspace
+ *              (register, pre-orders, prep desk, scanner, inventory).
+ *  - 'admin' — staff who additionally entered the admin code: full access
+ *              (sales & reports, demand forecast, settings, database monitor).
+ */
+export type UserRole = 'user' | 'staff' | 'admin';
 export type ActiveNavView = 'pos' | 'checklist-portal' | 'prep-queue' | 'inventory' | 'reports' | 'forecast';
+
+// Views only a full admin may open (staff never see these in the nav; guarded
+// again in App.tsx and reset on re-lock so a demotion can't strand the screen).
+export const ADMIN_ONLY_VIEWS: readonly ActiveNavView[] = ['reports', 'forecast'];
 
 // Branch identity lives in `lib/branches` so plain utilities can resolve a branch
 // without importing this React context. Re-exported here because every screen
@@ -112,6 +129,13 @@ interface POSContextType {
   setIsDatabaseModalOpen: (open: boolean) => void;
   loginAdmin: (password: string) => Promise<StaffLoginResult>;
   logoutAdmin: () => void;
+  // Staff → admin elevation via the in-app admin code (see lib/adminCode.ts).
+  isAdminUnlockModalOpen: boolean;
+  setIsAdminUnlockModalOpen: (open: boolean) => void;
+  unlockAdmin: (code: string) => Promise<StaffLoginResult>;
+  lockAdmin: () => void;
+  changeAdminCode: (currentCode: string, newCode: string) => Promise<StaffLoginResult>;
+  isAdminCodeConfigured: () => boolean;
   products: Product[];
   presetKits: PresetKit[];
   addPresetKit: (kit: Omit<PresetKit, 'id'>) => PresetKit;
@@ -217,6 +241,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isStaffRef = useRef<boolean>(false);
 
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
+  const [isAdminUnlockModalOpen, setIsAdminUnlockModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
 
@@ -224,22 +249,28 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const preorderPinned =
     typeof window !== 'undefined' && window.location.search.includes('mode=preorder');
 
-  // User vs Admin UI mode. No login is required for customers to view & submit
-  // pre-order checklists; the auth listener promotes the mode to 'admin' once the
-  // shared staff account signs in.
+  // Access tier. No login is required for customers to view & submit pre-order
+  // checklists; the auth listener promotes the mode to 'staff' once the shared
+  // staff account signs in, and unlockAdmin() elevates 'staff' → 'admin'.
   const [userRole, setUserRoleState] = useState<UserRole>('user');
 
   const setUserRole = (role: UserRole) => {
-    if (role === 'admin') {
-      if (!isAdminAuthenticated) {
-        setIsAdminLoginModalOpen(true);
-        return;
-      }
-      setUserRoleState('admin');
-    } else {
+    if (role === 'user') {
       setUserRoleState('user');
       setActiveView('checklist-portal');
+      return;
     }
+    // Any staff/admin tier first needs a signed-in staff session.
+    if (!isAdminAuthenticated) {
+      setIsAdminLoginModalOpen(true);
+      return;
+    }
+    // 'admin' is never granted silently — it always goes through the code check.
+    if (role === 'admin') {
+      setIsAdminUnlockModalOpen(true);
+      return;
+    }
+    setUserRoleState('staff');
   };
 
   // Sign in as staff using the shared account. onAuthStateChanged then flips
@@ -314,6 +345,53 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Sign-out failed:', err);
     }
     setActiveView('checklist-portal');
+  };
+
+  // ── Admin elevation (staff → admin) ──────────────────────────────────────────
+  // The shared Firebase account only proves "signed-in staff". The full-access
+  // admin tier is gated behind an in-app code (SHA-256 hashed, see lib/adminCode).
+  // Elevation is per-session on purpose: a reload restores the staff session but
+  // drops back to the limited tier, so financials/settings aren't left unlocked.
+  const unlockAdmin = async (code: string): Promise<StaffLoginResult> => {
+    if (!isAdminAuthenticated) {
+      return { ok: false, message: 'Sign in as staff first, then unlock admin access.' };
+    }
+    if (!adminCodeIsConfigured()) {
+      return { ok: false, message: 'No admin code has been set yet. Create one to continue.' };
+    }
+    const ok = await verifyAdminCode(code);
+    if (!ok) {
+      return { ok: false, message: 'Incorrect admin code. Try again or ask the store owner.' };
+    }
+    setUserRoleState('admin');
+    return { ok: true };
+  };
+
+  // Step back down to the limited staff tier. If the current screen is admin-only,
+  // move to the register so the demoted view doesn't render blank.
+  const lockAdmin = () => {
+    setUserRoleState((prev) => (prev === 'admin' ? 'staff' : prev));
+    setActiveView((v) => (ADMIN_ONLY_VIEWS.includes(v) ? 'pos' : v));
+  };
+
+  // Set (bootstrap) or rotate the admin code. When one already exists, the current
+  // code must be supplied first. Stored only as a hash, on this device.
+  const changeAdminCode = async (
+    currentCode: string,
+    newCode: string
+  ): Promise<StaffLoginResult> => {
+    const next = (newCode || '').trim();
+    if (next.length < 4) {
+      return { ok: false, message: 'Choose an admin code of at least 4 characters.' };
+    }
+    if (adminCodeIsConfigured()) {
+      const ok = await verifyAdminCode(currentCode);
+      if (!ok) {
+        return { ok: false, message: 'The current admin code is incorrect.' };
+      }
+    }
+    await setLocalAdminCode(next);
+    return { ok: true };
   };
 
   // ── Unified Central Database (Firestore is the source of truth) ──────────────
@@ -425,7 +503,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isStaffRef.current = isStaff;
       setIsAdminAuthenticated(isStaff);
       if (isStaff && !preorderPinned) {
-        setUserRoleState('admin');
+        // Fresh sign-in lands on the limited staff tier; a token refresh while
+        // already elevated preserves admin (unlock is per-session, not persisted).
+        setUserRoleState((prev) => (prev === 'admin' ? 'admin' : 'staff'));
         setActiveView((v) => (v === 'checklist-portal' ? 'pos' : v));
       } else if (!isStaff) {
         setUserRoleState('user');
@@ -786,14 +866,14 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     target: PurgeTarget,
     olderThanDays: number | null
   ): Promise<PurgeResult> => {
-    // The rules only allow staff to delete, so check here too — a clear sentence
-    // beats a raw permission-denied, and it stops a CSV being downloaded for a
-    // delete that was never going to be allowed.
-    if (!isAdminAuthenticated) {
+    // Destructive housekeeping is admin-only (the rules also require a staff
+    // session to delete; this stops a CSV downloading for a purge the UI would
+    // never allow anyway, and matches the admin-only Database Monitor entry).
+    if (userRole !== 'admin') {
       return {
         ok: false,
         deleted: 0,
-        message: 'Only signed-in staff can clear records. Log in as staff and try again.',
+        message: 'Only an admin can clear records. Unlock Admin access and try again.',
       };
     }
 
@@ -1509,6 +1589,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsDatabaseModalOpen,
         loginAdmin,
         logoutAdmin,
+        isAdminUnlockModalOpen,
+        setIsAdminUnlockModalOpen,
+        unlockAdmin,
+        lockAdmin,
+        changeAdminCode,
+        isAdminCodeConfigured: adminCodeIsConfigured,
         products,
         presetKits,
         addPresetKit,

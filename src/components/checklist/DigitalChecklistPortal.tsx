@@ -48,6 +48,7 @@ import { OrderStatusTracker } from './OrderStatusTracker';
 import { openGmailWeb, openClientEmail } from '../../utils/emailNotifier';
 import { printIsolatedSurface } from '../../utils/printSurface';
 import { countMyOrdersInProgress, rememberMyOrderNumber } from '../../lib/myOrders';
+import { validatePhPhone, formatPhPhone } from '../../lib/phone';
 
 export const DigitalChecklistPortal: React.FC = () => {
   const {
@@ -91,6 +92,12 @@ export const DigitalChecklistPortal: React.FC = () => {
   const [paymentOption, setPaymentOption] = useState<'Pay Later' | 'GCash' | 'Bank'>('Pay Later');
   const [paymentRef, setPaymentRef] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Live PH phone-number validation. `contactNumber` is only accepted once it
+  // parses as a real mobile/landline; the result drives the inline hint below
+  // the field and gates the submit handler.
+  const phoneCheck = useMemo(() => validatePhPhone(contactNumber), [contactNumber]);
+  const showPhoneError = contactNumber.trim().length > 0 && !phoneCheck.ok;
 
   // Selected items: record of productId -> quantity
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
@@ -246,8 +253,12 @@ export const DigitalChecklistPortal: React.FC = () => {
 
   const handleSubmitPreOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim() || !contactNumber.trim()) {
-      alert('Please fill in your name and contact phone number.');
+    if (!customerName.trim()) {
+      alert('Please fill in your name.');
+      return;
+    }
+    if (!phoneCheck.ok) {
+      alert(phoneCheck.error || 'Please enter a valid Philippine contact number, e.g. 0917 123 4567.');
       return;
     }
     if (selectedEntries.length === 0) {
@@ -263,7 +274,7 @@ export const DigitalChecklistPortal: React.FC = () => {
     const { order, saveStatus } = addCustomerPreOrder({
       customerName: customerName.trim(),
       schoolOrClinic: schoolOrClinic.trim(),
-      contactNumber: contactNumber.trim(),
+      contactNumber: phoneCheck.normalized,
       email: email.trim() || undefined,
       pickupBranch,
       targetPickupDate,
@@ -728,13 +739,36 @@ export const DigitalChecklistPortal: React.FC = () => {
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="tel"
+                    inputMode="tel"
                     required
                     placeholder="0917-xxx-xxxx"
                     value={contactNumber}
                     onChange={(e) => setContactNumber(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-white text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-emerald-500 font-mono placeholder:text-slate-400"
+                    aria-invalid={showPhoneError}
+                    className={`w-full pl-9 pr-3 py-2 text-xs bg-white text-slate-900 border rounded-xl focus:outline-none font-mono placeholder:text-slate-400 ${
+                      showPhoneError
+                        ? 'border-rose-400 focus:border-rose-500'
+                        : phoneCheck.ok
+                        ? 'border-emerald-400 focus:border-emerald-500'
+                        : 'border-slate-300 focus:border-emerald-500'
+                    }`}
                   />
                 </div>
+                {showPhoneError ? (
+                  <p className="mt-1 flex items-center gap-1 text-[10px] font-medium text-rose-600">
+                    <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    {phoneCheck.error}
+                  </p>
+                ) : phoneCheck.ok ? (
+                  <p className="mt-1 flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                    <Check className="w-3 h-3 flex-shrink-0" />
+                    Valid PH {phoneCheck.kind} — {formatPhPhone(contactNumber)}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    PH mobile (0917…) or landline (033…), any spacing is fine.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1069,7 +1103,7 @@ export const DigitalChecklistPortal: React.FC = () => {
                 </button>
               </div>
 
-              {userRole === 'admin' ? (
+              {userRole !== 'user' ? (
                 <button
                   type="button"
                   onClick={() => {
