@@ -89,6 +89,7 @@ export const InventoryManagement: React.FC = () => {
     batchNumber: `LOT-${new Date().getFullYear()}-01`,
     expiryDate: '2028-12-31',
     fdaRegistrationNo: 'FDA-CDRRHR-2024-001',
+    supplier: '',
     description: '',
   });
 
@@ -196,6 +197,7 @@ export const InventoryManagement: React.FC = () => {
       batchNumber: `LOT-${new Date().getFullYear()}-01`,
       expiryDate: '2028-12-31',
       fdaRegistrationNo: 'FDA-CDRRHR-2024-001',
+      supplier: '',
       description: '',
     });
   };
@@ -218,11 +220,11 @@ export const InventoryManagement: React.FC = () => {
   // Export to CSV / Excel format
   const handleExportCSV = () => {
     const headers =
-      "SKU,Barcode,Product Name,Generic Name,Category,Unit,Selling Price,Cost Price,Main Branch Stock,D'Jabez Branch Stock,Total Stock,Fast Moving,Shelf Life,FDA CPR No,Batch No,Expiry Date\n";
+      "SKU,Barcode,Product Name,Generic Name,Category,Unit,Selling Price,Cost Price,Main Branch Stock,D'Jabez Branch Stock,Total Stock,Fast Moving,Shelf Life,FDA CPR No,Batch No,Expiry Date,Supplier\n";
     const rows = products
       .map(
         (p) =>
-          `"${p.sku}","${p.barcode}","${p.name.replace(/"/g, '""')}","${(p.genericName || '').replace(/"/g, '""')}","${p.category}","${p.unit}",${p.price},${p.costPrice},${p.stockMainBranch},${p.stockUsaBranch},${p.stockMainBranch + p.stockUsaBranch},${p.isFastMoving ? 'YES' : 'NO'},${p.shelfLifeType},"${p.fdaRegistrationNo}","${p.batchNumber}","${p.expiryDate}"`
+          `"${p.sku}","${p.barcode}","${p.name.replace(/"/g, '""')}","${(p.genericName || '').replace(/"/g, '""')}","${p.category}","${p.unit}",${p.price},${p.costPrice},${p.stockMainBranch},${p.stockUsaBranch},${p.stockMainBranch + p.stockUsaBranch},${p.isFastMoving ? 'YES' : 'NO'},${p.shelfLifeType},"${p.fdaRegistrationNo}","${p.batchNumber}","${p.expiryDate}","${(p.supplier || '').replace(/"/g, '""')}"`
       )
       .join('\n');
 
@@ -450,6 +452,11 @@ export const InventoryManagement: React.FC = () => {
                           </span>
                         )}
                       </div>
+                      {p.supplier && (
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Supplier: <span className="text-slate-700 font-medium">{p.supplier}</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Barcode */}
@@ -921,6 +928,17 @@ export const InventoryManagement: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Supplier</label>
+                <input
+                  type="text"
+                  placeholder="e.g. MedLine Distributors Inc."
+                  value={editingProduct.supplier || ''}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, supplier: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
               <div className="flex items-center gap-3 pt-2">
                 <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                   <input
@@ -1176,6 +1194,17 @@ export const InventoryManagement: React.FC = () => {
                     className="w-full px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Supplier</label>
+                <input
+                  type="text"
+                  placeholder="e.g. MedLine Distributors Inc."
+                  value={newProdData.supplier}
+                  onChange={(e) => setNewProdData({ ...newProdData, supplier: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
+                />
               </div>
 
               <div className="flex items-center gap-3 pt-1">

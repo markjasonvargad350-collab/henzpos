@@ -65,6 +65,7 @@ export interface Product {
   batchNumber: string;
   expiryDate: string; // YYYY-MM-DD
   fdaRegistrationNo: string; // FDA CPR / CDRRHR registration #
+  supplier?: string; // Vendor/distributor this product is sourced from (for reordering)
   description?: string;
 }
 
