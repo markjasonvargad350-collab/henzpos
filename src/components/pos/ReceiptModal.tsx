@@ -2,17 +2,12 @@ import React, { useRef, useState, useEffect } from 'react';
 import {
   Printer,
   X,
-  Download,
   CheckCircle,
-  ShieldCheck,
   HeartPulse,
   Sliders,
   Mail,
   Send,
   ExternalLink,
-  FileText,
-  Copy,
-  Check,
 } from 'lucide-react';
 import { SaleTransaction } from '../../types';
 import {
@@ -26,11 +21,7 @@ import { QRCodeRenderer } from '../common/QRCodeRenderer';
 import { getReceiptSettings, ReceiptSettings } from '../../utils/receiptSettings';
 import { ReceiptCustomizerModal } from './ReceiptCustomizerModal';
 import { openGmailWeb } from '../../utils/emailNotifier';
-import {
-  printReceiptDirectly,
-  openReceiptInNewTab,
-  downloadReceiptFile,
-} from '../../utils/printReceipt';
+import { printReceiptDirectly, openReceiptInNewTab } from '../../utils/printReceipt';
 import { soundEffects } from '../../utils/audio';
 
 interface ReceiptModalProps {
@@ -53,7 +44,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [printStatusToast, setPrintStatusToast] = useState<string | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   useEffect(() => {
     if (isOpen && transaction) {
@@ -93,7 +83,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     setPrintStatusToast('Preparing thermal printer output...');
     try {
       await printReceiptDirectly(transaction, receiptSettings);
-      setPrintStatusToast('Printer dialog dispatched successfully!');
+      setPrintStatusToast('Print dialog opened.');
       setTimeout(() => setPrintStatusToast(null), 3000);
     } catch (e) {
       console.error('Print error:', e);
@@ -109,19 +99,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     setPrintStatusToast('Opening standalone printable invoice...');
     await openReceiptInNewTab(transaction, receiptSettings);
     setTimeout(() => setPrintStatusToast(null), 2500);
-  };
-
-  const handleDownload = async (format: 'html' | 'txt') => {
-    await downloadReceiptFile(transaction, receiptSettings, format);
-    setPrintStatusToast(`Receipt downloaded as .${format.toUpperCase()}!`);
-    setTimeout(() => setPrintStatusToast(null), 2500);
-  };
-
-  const handleCopyReceiptText = () => {
-    const text = `HENZ Health Care Trading - Official Receipt #${transaction.receiptNumber}\nDate: ${transaction.timestamp}\nCustomer: ${transaction.customerName}\nBranch: ${transaction.branch}\nTotal: ₱${transaction.grandTotal.toLocaleString()}\nPayment: ${transaction.paymentMethod}`;
-    navigator.clipboard?.writeText(text);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleEmailInvoice = (targetEmail?: string) => {
@@ -175,15 +152,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 <span className="hidden sm:inline">Format</span>
               </button>
 
-              {/* Primary Instant Print Button */}
               <button
-                onClick={handleDirectPrint}
-                disabled={isPrinting}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-md shadow-emerald-950/50 active:scale-95"
-                title="Print directly to connected thermal or standard printer"
+                type="button"
+                onClick={handleOpenInNewTab}
+                className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-lg text-xs font-medium transition cursor-pointer border border-slate-200"
+                title="If the print dialog doesn't appear, open the receipt in a clean new tab and print from there"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>{isPrinting ? 'Printing...' : 'Print Receipt'}</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Open in Tab</span>
               </button>
 
               <button
@@ -235,40 +211,6 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               </button>
             </div>
           )}
-
-          {/* Multi-Format Print & Export Quick Bar (Hidden on Print) */}
-          <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px] print:hidden">
-            <span className="text-slate-500">Print not working in preview?</span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handleOpenInNewTab}
-                className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-blue-700 hover:text-blue-900 rounded-md font-medium border border-blue-200 transition cursor-pointer"
-                title="Opens a clean printable window in a separate tab (bypasses iframe restrictions)"
-              >
-                <ExternalLink className="w-3 h-3 text-blue-600" />
-                <span>Open in New Tab</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDownload('html')}
-                className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md font-medium border border-slate-200 transition cursor-pointer"
-                title="Download offline HTML receipt"
-              >
-                <Download className="w-3 h-3 text-emerald-600" />
-                <span>Save HTML</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyReceiptText}
-                className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 rounded-md font-medium border border-slate-200 transition cursor-pointer"
-                title="Copy receipt summary to clipboard"
-              >
-                {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-slate-500" />}
-                <span>{copiedLink ? 'Copied' : 'Copy'}</span>
-              </button>
-            </div>
-          </div>
 
           {/* Official Thermal / Medical Sales Invoice Paper */}
           <div
@@ -461,10 +403,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <button
                 type="button"
                 onClick={handleDirectPrint}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-slate-200 cursor-pointer"
+                disabled={isPrinting}
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 border border-slate-800 cursor-pointer"
               >
-                <Printer className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Print Again</span>
+                <Printer className="w-3.5 h-3.5" />
+                <span>{isPrinting ? 'Printing…' : 'Print Receipt'}</span>
               </button>
               <button
                 onClick={onClose}

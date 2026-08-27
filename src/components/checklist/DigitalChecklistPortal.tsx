@@ -40,12 +40,13 @@ import {
   Clock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { usePOS, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
+import { usePOS, BRANCH_MAIN, BRANCH_DJABEZ, PreOrderSaveStatus } from '../../context/POSContext';
 import { CustomerPreOrder, BranchName, PresetKit } from '../../types';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
 import { PresetKitModal } from './PresetKitModal';
 import { OrderStatusTracker } from './OrderStatusTracker';
 import { openGmailWeb, openClientEmail } from '../../utils/emailNotifier';
+import { printIsolatedSurface } from '../../utils/printSurface';
 import { countMyOrdersInProgress, rememberMyOrderNumber } from '../../lib/myOrders';
 
 export const DigitalChecklistPortal: React.FC = () => {
@@ -105,6 +106,9 @@ export const DigitalChecklistPortal: React.FC = () => {
 
   // Completed pre-order response modal
   const [submittedOrder, setSubmittedOrder] = useState<CustomerPreOrder | null>(null);
+  // Real save state of the submitted pre-order, shown honestly in the slip header
+  // (starts 'saving' the instant we show the slip, then settles to the true result).
+  const [preOrderSaveState, setPreOrderSaveState] = useState<'saving' | PreOrderSaveStatus>('saving');
 
   const categories = [
     'All',
@@ -256,7 +260,7 @@ export const DigitalChecklistPortal: React.FC = () => {
       quantity,
     }));
 
-    const newOrder = addCustomerPreOrder({
+    const { order, saveStatus } = addCustomerPreOrder({
       customerName: customerName.trim(),
       schoolOrClinic: schoolOrClinic.trim(),
       contactNumber: contactNumber.trim(),
@@ -276,22 +280,37 @@ export const DigitalChecklistPortal: React.FC = () => {
       notes: notes.trim() || undefined,
     });
 
-    setSubmittedOrder(newOrder);
+    setSubmittedOrder(order);
+    setPreOrderSaveState('saving');
 
     // Save to customer's private device session so they can track only their own orders
-    rememberMyOrderNumber(newOrder.orderNumber);
+    rememberMyOrderNumber(order.orderNumber);
     setMyOrdersVersion((v) => v + 1);
 
-    try {
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
-    } catch {
-      // ignore
-    }
+    // Only celebrate once we know the real outcome. A confirmed cloud save
+    // ('synced') or a durable offline queue ('queued') earns the confetti; a
+    // 'failed' write does NOT — the slip shows an honest error banner instead.
+    saveStatus.then((status) => {
+      setPreOrderSaveState(status);
+      if (status !== 'failed') {
+        try {
+          confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        } catch {
+          // ignore
+        }
+      }
+    });
   };
+
+  // Honest, state-driven header for the submitted-order slip. The slip appears
+  // immediately (optimistic — the order number is generated on-device), but the
+  // heading tells the truth about whether it actually saved.
+  const { Icon: SaveStatusIcon, color: saveStatusColor, title: saveStatusTitle } = {
+    saving: { Icon: Clock, color: 'text-slate-500', title: 'Saving your pre-order…' },
+    synced: { Icon: CheckCircle2, color: 'text-emerald-600', title: 'Pre-Order Confirmed & Saved!' },
+    queued: { Icon: Clock, color: 'text-amber-600', title: 'Saved — will sync when back online' },
+    failed: { Icon: AlertCircle, color: 'text-red-600', title: "Couldn't save — please try again" },
+  }[preOrderSaveState];
 
   return (
     <div className="max-w-7xl mx-auto p-4 space-y-6 text-slate-800">
@@ -928,8 +947,8 @@ export const DigitalChecklistPortal: React.FC = () => {
             {/* Header */}
             <div className="bg-slate-50 text-slate-900 px-6 py-4 flex items-center justify-between border-b border-slate-200 print:hidden">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-bold text-sm text-slate-900">Pre-Order Received & Queued!</h3>
+                <SaveStatusIcon className={`w-5 h-5 ${saveStatusColor}`} />
+                <h3 className="font-bold text-sm text-slate-900">{saveStatusTitle}</h3>
               </div>
               <button
                 onClick={() => setSubmittedOrder(null)}
@@ -939,8 +958,18 @@ export const DigitalChecklistPortal: React.FC = () => {
               </button>
             </div>
 
+            {preOrderSaveState === 'failed' && (
+              <div className="mx-6 mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 print:hidden">
+                <p className="font-bold">This pre-order was NOT saved to our system.</p>
+                <p className="mt-1">
+                  Please screenshot this and contact the store, or close this and submit again.
+                  Don’t rely on this slip until the header shows “Confirmed.”
+                </p>
+              </div>
+            )}
+
             {/* Printable Slip Content */}
-            <div className="p-6 space-y-4 bg-white text-slate-800">
+            <div className="print-slip-surface p-6 space-y-4 bg-white text-slate-800">
               <div className="text-center space-y-1">
                 <span className="text-[10px] font-bold text-teal-900 uppercase tracking-widest bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
                   HENZ Health Care Products Trading • Student Pickup Slip
@@ -1003,7 +1032,7 @@ export const DigitalChecklistPortal: React.FC = () => {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={printIsolatedSurface}
                   className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
                 >
                   <Printer className="w-4 h-4 text-teal-600" />

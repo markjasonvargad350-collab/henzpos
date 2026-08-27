@@ -21,6 +21,7 @@ import { usePOS } from '../../context/POSContext';
 import { CustomerPreOrder } from '../../types';
 import { filterMyOrders, readMyOrderNumbers } from '../../lib/myOrders';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
+import { printIsolatedSurface } from '../../utils/printSurface';
 
 interface OrderStatusTrackerProps {
   initialOrderNumber?: string;
@@ -381,7 +382,7 @@ export const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
             </div>
 
             {/* Digital Pickup QR Code */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center">
+            <div className="print-slip-surface bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center">
               <span className="text-[11px] text-slate-500 font-semibold mb-2">
                 Fast Counter QR Pass
               </span>
@@ -399,7 +400,7 @@ export const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
               </p>
 
               <button
-                onClick={() => window.print()}
+                onClick={printIsolatedSurface}
                 className="mt-3 px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition cursor-pointer flex items-center gap-1.5"
               >
                 <Printer className="w-3.5 h-3.5 text-teal-600" />

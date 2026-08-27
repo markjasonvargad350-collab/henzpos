@@ -90,6 +90,16 @@ export interface StaffLoginResult {
   message?: string;
 }
 
+/**
+ * How a customer pre-order write actually landed — reported HONESTLY to the
+ * customer instead of always celebrating success:
+ *  - 'synced'  — the write reached Firestore and is confirmed saved.
+ *  - 'queued'  — device is offline; the write is durably queued on-device and
+ *                will sync automatically on reconnect (a real, recoverable save).
+ *  - 'failed'  — the write was REJECTED (auth/rules/invalid data). Nothing saved.
+ */
+export type PreOrderSaveStatus = 'synced' | 'queued' | 'failed';
+
 interface POSContextType {
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
@@ -148,7 +158,7 @@ interface POSContextType {
     paymentMethod: CustomerPreOrder['paymentMethod'];
     paymentRefNumber?: string;
     notes?: string;
-  }) => CustomerPreOrder;
+  }) => { order: CustomerPreOrder; saveStatus: Promise<PreOrderSaveStatus> };
   updatePreOrderStatus: (orderId: string, status: PreOrderStatus, packedItemIds?: string[]) => void;
   transferStock: (
     productId: string,
@@ -1110,7 +1120,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const subtotal = active.items.reduce((acc, item) => acc + item.subtotal, 0);
     const discount = saleData.discountAmount || 0;
     const grandTotal = Math.max(0, subtotal - discount);
-    const taxAmount = Math.round(grandTotal * 0.12);
+    // VAT on a VAT-INCLUSIVE price is the portion already baked into the total,
+    // NOT 12% of the total. For a VAT-inclusive grand total the net (VATable)
+    // sales = total / 1.12 and the VAT = total − net. Defining VAT as that
+    // remainder guarantees "VATable Sales + VAT = Grand Total" foots exactly on
+    // the printed receipt. (12% of the gross overstated it, e.g. a ₱1,120 sale
+    // printed ₱1,000 + ₱134 = ₱1,134 ≠ ₱1,120; correct VAT is ₱120.)
+    const taxAmount = grandTotal - Math.round(grandTotal / 1.12);
     const totalItemCount = active.items.reduce((acc, item) => acc + item.quantity, 0);
 
     const now = new Date();
@@ -1215,7 +1231,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod: CustomerPreOrder['paymentMethod'];
     paymentRefNumber?: string;
     notes?: string;
-  }): CustomerPreOrder => {
+  }): { order: CustomerPreOrder; saveStatus: Promise<PreOrderSaveStatus> } => {
     // Human-facing order number: date-stamped plus a short random code (see
     // src/utils/ids.ts for why random and not a running count). Generated fully
     // client-side so it works OFFLINE, and safe to read aloud or type into the
@@ -1266,23 +1282,54 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     soundEffects.playQRScanChime();
 
-    // Write to Firestore; the onSnapshot listener adds it to local state (and
-    // chimes on the staff terminal). A genuinely offline write does NOT reject —
-    // it queues and syncs later — so a rejection/throw here is a real failure
-    // (auth, rules, or invalid data) that must be surfaced, not swallowed.
-    try {
-      setDoc(doc(db, COLLECTIONS.preOrders, newOrder.id), newOrder).catch((err) => {
-        reportSyncFailure('Pre-order', `Order ${newOrder.orderNumber} — ${newOrder.customerName}`, err);
-      });
-    } catch (err) {
-      reportSyncFailure(
-        'Pre-order',
-        `Order ${newOrder.orderNumber} — ${newOrder.customerName} (invalid data)`,
-        err
-      );
-    }
+    // Kick off the write and derive an HONEST save status from how the promise
+    // settles — instead of the old fire-and-forget that let the UI celebrate
+    // before anything was saved. Firestore semantics make this a 3-way race:
+    //   • resolves            → 'synced'  (confirmed in the cloud)
+    //   • rejects             → 'failed'  (auth/rules/invalid data — nothing saved;
+    //                                      also surfaced to staff via reportSyncFailure)
+    //   • neither, then timer → 'queued'  (offline: the write is durably queued
+    //                                      on-device and WILL sync on reconnect —
+    //                                      an offline write never resolves OR rejects)
+    // This never blocks: the caller shows the slip immediately and just updates a
+    // small badge (and gates the confetti) when saveStatus settles.
+    const saveStatus = new Promise<PreOrderSaveStatus>((resolve) => {
+      let settled = false;
+      const finish = (s: PreOrderSaveStatus) => {
+        if (settled) return;
+        settled = true;
+        resolve(s);
+      };
+      // 2.5s is long enough that an online write almost always resolves first, so
+      // we only fall back to 'queued' when the device is genuinely offline.
+      const timer = setTimeout(() => finish('queued'), 2500);
 
-    return newOrder;
+      try {
+        setDoc(doc(db, COLLECTIONS.preOrders, newOrder.id), newOrder)
+          .then(() => {
+            clearTimeout(timer);
+            finish('synced');
+          })
+          .catch((err) => {
+            // A rejection is a REAL failure (offline would not reject). Surface it
+            // to staff and tell the customer nothing was saved.
+            clearTimeout(timer);
+            reportSyncFailure('Pre-order', `Order ${newOrder.orderNumber} — ${newOrder.customerName}`, err);
+            finish('failed');
+          });
+      } catch (err) {
+        // Synchronous throw = invalid data before the write even left the device.
+        clearTimeout(timer);
+        reportSyncFailure(
+          'Pre-order',
+          `Order ${newOrder.orderNumber} — ${newOrder.customerName} (invalid data)`,
+          err
+        );
+        finish('failed');
+      }
+    });
+
+    return { order: newOrder, saveStatus };
   };
 
   const updatePreOrderStatus = (orderId: string, status: PreOrderStatus, packedItemIds?: string[]) => {

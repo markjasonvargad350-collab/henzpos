@@ -242,21 +242,26 @@ export async function sendEmailNotification(
     console.warn('Server email dispatch failed, recording log:', err);
   }
 
-  // Fallback logging & confirmation
+  // No server mailer is configured — the /api/send-email proxy above does not
+  // exist in this deployment — so NOTHING was actually emailed. Record the intent
+  // as Pending and report failure HONESTLY. The caller falls back to opening the
+  // staff mail client ("Email Customer") so a real person sends it. Returning
+  // success:true here used to make the app claim it had emailed the customer when
+  // it never did.
   addEmailLog({
     orderNumber,
     recipientName,
     recipientEmail,
     subject,
     bodySnippet: body.substring(0, 140) + '...',
-    status: 'Dispatched',
+    status: 'Pending',
     type,
   });
 
   return {
-    success: true,
-    message: `Email alert prepared for ${recipientEmail}. You can also open your mail app pre-filled.`,
-    method: 'Local Dispatch',
+    success: false,
+    message: `No automatic mail server is set up, so nothing was sent yet. Use "Email Customer" to send this from your own mail app.`,
+    method: 'None',
   };
 }
 

@@ -266,7 +266,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
             <div className="text-right text-xs text-slate-600 sm:border-l sm:border-emerald-200 sm:pl-4">
               <div>Subtotal: <span className="font-mono font-bold text-slate-800">₱{rawSubtotal.toLocaleString()}</span></div>
-              <div>VAT (12% Included): <span className="font-mono text-slate-700">₱{Math.round(grandTotal * 0.12).toLocaleString()}</span></div>
+              <div>VAT (12% Included): <span className="font-mono text-slate-700">₱{(grandTotal - Math.round(grandTotal / 1.12)).toLocaleString()}</span></div>
             </div>
           </div>
 
