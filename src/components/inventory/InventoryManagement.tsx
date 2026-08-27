@@ -26,7 +26,7 @@ import {
 import { usePOS, branchShortLabel } from '../../context/POSContext';
 import { BranchKey, Product, ProductCategory, ShelfLifeType } from '../../types';
 import { uniqueEan13 } from '../../lib/barcode';
-import { printProductLabels, LabelSymbology } from '../../utils/printLabel';
+import { printProductLabels, printProductLabelsBatch, LabelSymbology } from '../../utils/printLabel';
 import { QRCodeRenderer } from '../common/QRCodeRenderer';
 import { BarcodeRenderer } from '../common/BarcodeRenderer';
 
@@ -61,6 +61,13 @@ export const InventoryManagement: React.FC = () => {
   const [labelProduct, setLabelProduct] = useState<Product | null>(null);
   const [labelStyle, setLabelStyle] = useState<LabelSymbology>('qr');
   const [labelCopies, setLabelCopies] = useState<number>(1);
+
+  // Batch label print modal (labels for many products at once)
+  const [isBatchLabelOpen, setIsBatchLabelOpen] = useState(false);
+  const [batchStyle, setBatchStyle] = useState<LabelSymbology>('qr');
+  const [batchCopies, setBatchCopies] = useState<number>(1);
+  const [batchScope, setBatchScope] = useState<'all' | 'shown'>('all');
+  const [batchPrinting, setBatchPrinting] = useState(false);
 
   // Add new product modal
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -282,6 +289,18 @@ export const InventoryManagement: React.FC = () => {
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export Excel/CSV</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setBatchScope('all');
+              setIsBatchLabelOpen(true);
+            }}
+            className="px-3.5 py-2 bg-slate-50 hover:bg-indigo-100 text-indigo-600 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-slate-200 hover:border-indigo-300 cursor-pointer"
+            title="Print scannable barcode labels for many products at once"
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>Print All Labels</span>
           </button>
         </div>
       </div>
@@ -1283,6 +1302,132 @@ export const InventoryManagement: React.FC = () => {
                   auto-generate a valid EAN-13), then print a label.
                 </div>
               )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Batch Barcode Label Print Modal */}
+      {isBatchLabelOpen && (() => {
+        const targets = batchScope === 'shown' ? filteredProducts : products;
+        const printable = targets.filter((p) => (p.barcode || p.sku || '').trim());
+        const skipped = targets.length - printable.length;
+        const totalLabels = printable.length * batchCopies;
+        const canPrint = printable.length > 0;
+        const hasFilter = filteredProducts.length !== products.length;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto">
+            <div className="bg-white text-slate-800 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 my-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-indigo-600" />
+                  Print All Barcode Labels
+                </h3>
+                <button onClick={() => setIsBatchLabelOpen(false)} className="text-slate-400 hover:text-slate-900 p-1 rounded hover:bg-slate-100 transition cursor-pointer">
+                  ✕
+                </button>
+              </div>
+
+              {/* Scope */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Which products?</label>
+                {hasFilter ? (
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setBatchScope('all')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${batchScope === 'all' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      All products ({products.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBatchScope('shown')}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${batchScope === 'shown' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Currently shown ({filteredProducts.length})
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    All <span className="font-bold text-slate-900">{products.length}</span> products in the catalogue.
+                  </div>
+                )}
+              </div>
+
+              {/* Style */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Label Style</label>
+                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setBatchStyle('qr')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${batchStyle === 'qr' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    QR Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchStyle('barcode')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${batchStyle === 'barcode' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Striped Barcode
+                  </button>
+                </div>
+              </div>
+
+              {/* Copies per product */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Copies per product</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={batchCopies}
+                  onChange={(e) => setBatchCopies(Math.max(1, Math.min(10, parseInt(e.target.value, 10) || 1)))}
+                  className="w-24 px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Summary */}
+              <div className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-lg px-3 py-2.5 space-y-0.5">
+                <div>
+                  <span className="font-bold">{totalLabels}</span> label{totalLabels === 1 ? '' : 's'} on one sheet
+                  {batchCopies > 1 ? ` (${printable.length} × ${batchCopies})` : ''}.
+                </div>
+                {skipped > 0 && (
+                  <div className="text-amber-700">
+                    {skipped} product{skipped === 1 ? '' : 's'} skipped — no barcode or SKU yet.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsBatchLabelOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={!canPrint || batchPrinting}
+                  onClick={async () => {
+                    setBatchPrinting(true);
+                    try {
+                      await printProductLabelsBatch(targets, { symbology: batchStyle, copiesPerProduct: batchCopies });
+                      setIsBatchLabelOpen(false);
+                    } finally {
+                      setBatchPrinting(false);
+                    }
+                  }}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-md shadow-indigo-950/40 inline-flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  {batchPrinting ? 'Preparing…' : `Print ${totalLabels} Label${totalLabels === 1 ? '' : 's'}`}
+                </button>
+              </div>
             </div>
           </div>
         );
