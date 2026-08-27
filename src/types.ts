@@ -231,3 +231,77 @@ export interface PurgeResult {
   exportedAs?: string;
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+ * Demand forecasting & reorder recommendation (research feature)
+ *
+ * The ML half of "…with Machine-Learning-Based Demand Forecasting and Reorder
+ * Recommendation." The forecast is Exponential Smoothing (the Holt-Winters / ETS
+ * family); the reorder layer is a classical forecast-driven inventory policy that
+ * CONSUMES the forecast — see src/lib/forecasting.ts and src/lib/reorder.ts.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/** Which method produced a forecast — the ETS ladder plus its baselines. */
+export type ForecastMethod = 'none' | 'naive-mean' | 'moving-average' | 'ses' | 'holt' | 'croston';
+
+/** Reorder urgency, mapped to the app's rose/amber/emerald palette in the UI. */
+export type Urgency = 'critical' | 'high' | 'medium' | 'ok';
+
+/** Forecast error measured on a held-out tail. `mape` is null with no positive actuals. */
+export interface ForecastAccuracy {
+  mae: number;
+  rmse: number;
+  mape: number | null;
+  /** Number of holdout points that were scored. */
+  n: number;
+}
+
+/** The demand forecast for one product at one branch (or 'ALL' branches combined). */
+export interface DemandForecastResult {
+  productId: string;
+  branch: BranchName | 'ALL';
+  method: ForecastMethod;
+  /** Fitted smoothing parameters / window — the "learned" values, for the paper. */
+  params: { alpha?: number; beta?: number; window?: number };
+  /** Seasonally-adjusted mean demand per day (drives the reorder math). */
+  dailyRate: number;
+  /** Day-to-day demand variability, used for safety stock. */
+  dailyStdDev: number;
+  /** Per-day forecast for the next H days (already seasonally adjusted). */
+  horizon: number[];
+  /** Seasonal multiplier applied (1 = none). */
+  seasonalFactor: number;
+  accuracy: ForecastAccuracy;
+  confidence: 'none' | 'low' | 'medium' | 'high';
+  /** Observed window length in days (span the model actually saw). */
+  dataDays: number;
+  /** Plain-English provenance, shown in the UI. */
+  note: string;
+}
+
+/** A reorder recommendation for one product at one branch. */
+export interface ReorderRecommendation {
+  productId: string;
+  productName: string;
+  sku: string;
+  branch: BranchName;
+  onHand: number;
+  dailyDemand: number;
+  leadTimeDays: number;
+  safetyStock: number;
+  reorderPoint: number;
+  orderUpToLevel: number;
+  suggestedOrderQty: number;
+  /** Days the current stock lasts at the forecast rate; null when demand is 0. */
+  daysOfCover: number | null;
+  /** 'YYYY-MM-DD' by which to place the order; null when no reorder is needed. */
+  orderByDate: string | null;
+  urgency: Urgency;
+  /** Committed (unclaimed) pre-order quantity folded into the need. */
+  committedPreOrderQty: number;
+  /** True when a short-shelf-life item can't be sold before it expires. */
+  expiryRisk: boolean;
+  /** Provenance of the underlying forecast. */
+  method: ForecastMethod;
+  reason: string;
+}
+

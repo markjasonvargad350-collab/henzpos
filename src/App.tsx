@@ -11,6 +11,7 @@ import { DigitalChecklistPortal } from './components/checklist/DigitalChecklistP
 import { OrderPrepQueue } from './components/prep/OrderPrepQueue';
 import { InventoryManagement } from './components/inventory/InventoryManagement';
 import { ReportsView } from './components/reports/ReportsView';
+import { DemandForecast } from './components/forecast/DemandForecast';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
 import { PWAStatusToast } from './components/common/PWAStatusToast';
 import { SharePreOrderModal } from './components/common/SharePreOrderModal';
@@ -45,6 +46,7 @@ const MainLayout: React.FC = () => {
             {activeView === 'prep-queue' && <OrderPrepQueue />}
             {activeView === 'inventory' && <InventoryManagement />}
             {activeView === 'reports' && <ReportsView />}
+            {activeView === 'forecast' && <DemandForecast />}
           </>
         )}
       </main>

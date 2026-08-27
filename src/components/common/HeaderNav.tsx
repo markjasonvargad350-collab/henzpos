@@ -5,6 +5,7 @@ import {
   PackageCheck,
   Boxes,
   BarChart3,
+  TrendingUp,
   Building2,
   Share2,
   Lock,
@@ -50,6 +51,7 @@ export const HeaderNav: React.FC = () => {
     { id: 'prep-queue', label: 'Prep Desk', icon: PackageCheck, badge: pendingPreOrdersCount > 0 ? pendingPreOrdersCount : undefined },
     { id: 'inventory', label: 'Inventory & Expiry', icon: Boxes },
     { id: 'reports', label: 'Sales & Reports', icon: BarChart3 },
+    { id: 'forecast', label: 'Demand Forecast', icon: TrendingUp },
   ];
 
   return (

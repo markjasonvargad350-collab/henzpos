@@ -49,7 +49,7 @@ import {
 } from 'firebase/auth';
 
 export type UserRole = 'user' | 'admin';
-export type ActiveNavView = 'pos' | 'checklist-portal' | 'prep-queue' | 'inventory' | 'reports';
+export type ActiveNavView = 'pos' | 'checklist-portal' | 'prep-queue' | 'inventory' | 'reports' | 'forecast';
 
 // Branch identity lives in `lib/branches` so plain utilities can resolve a branch
 // without importing this React context. Re-exported here because every screen
