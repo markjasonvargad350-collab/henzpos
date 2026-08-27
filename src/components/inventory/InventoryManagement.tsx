@@ -19,9 +19,16 @@ import {
   MoreVertical,
   AlertCircle,
   Package,
+  QrCode,
+  Wand2,
+  Printer,
 } from 'lucide-react';
 import { usePOS, branchShortLabel } from '../../context/POSContext';
 import { BranchKey, Product, ProductCategory, ShelfLifeType } from '../../types';
+import { uniqueEan13 } from '../../lib/barcode';
+import { printProductLabels, LabelSymbology } from '../../utils/printLabel';
+import { QRCodeRenderer } from '../common/QRCodeRenderer';
+import { BarcodeRenderer } from '../common/BarcodeRenderer';
 
 export const InventoryManagement: React.FC = () => {
   const { products, transferStock, restockProduct, addProduct, updateProduct, deleteProduct, setIsDatabaseModalOpen } = usePOS();
@@ -49,6 +56,11 @@ export const InventoryManagement: React.FC = () => {
 
   // Edit product modal state
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // Barcode label print modal
+  const [labelProduct, setLabelProduct] = useState<Product | null>(null);
+  const [labelStyle, setLabelStyle] = useState<LabelSymbology>('qr');
+  const [labelCopies, setLabelCopies] = useState<number>(1);
 
   // Add new product modal
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -143,6 +155,11 @@ export const InventoryManagement: React.FC = () => {
     setInventoryNotice(`Restocked +${restockQty} unit(s) of "${restockModalProduct.name}" into ${branchShortLabel[restockTarget]}.`);
     setRestockModalProduct(null);
   };
+
+  // Fill the barcode field with a fresh, valid EAN-13 not already in the catalogue.
+  // Lets the operator add a placeholder product without inventing a number by hand.
+  const generateBarcode = (): string =>
+    uniqueEan13(new Set(products.map((p) => p.barcode).filter(Boolean)));
 
   const handleSaveNewProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -511,6 +528,18 @@ export const InventoryManagement: React.FC = () => {
                         </button>
 
                         <button
+                          onClick={() => {
+                            setLabelProduct(p);
+                            setLabelStyle('qr');
+                            setLabelCopies(1);
+                          }}
+                          className="p-1.5 bg-slate-50 hover:bg-indigo-100 text-indigo-600 border border-slate-200 hover:border-indigo-300 rounded-lg transition cursor-pointer"
+                          title="Generate & print a scannable barcode label"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
                           onClick={() => setEditingProduct({ ...p })}
                           className="p-1.5 bg-slate-50 hover:bg-slate-100 text-blue-600 border border-slate-200 hover:border-blue-300 rounded-lg transition cursor-pointer"
                           title="Edit product details"
@@ -744,13 +773,23 @@ export const InventoryManagement: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Barcode (EAN-13)</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingProduct.barcode}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, barcode: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-emerald-500"
-                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      required
+                      value={editingProduct.barcode}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, barcode: e.target.value })}
+                      className="flex-1 min-w-0 px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct({ ...editingProduct, barcode: generateBarcode() })}
+                      className="shrink-0 inline-flex items-center px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition cursor-pointer"
+                      title="Auto-generate a valid EAN-13 barcode"
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -988,14 +1027,24 @@ export const InventoryManagement: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Barcode (EAN-13)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="4806500123456"
-                    value={newProdData.barcode}
-                    onChange={(e) => setNewProdData({ ...newProdData, barcode: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-emerald-500"
-                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      required
+                      placeholder="4806500123456"
+                      value={newProdData.barcode}
+                      onChange={(e) => setNewProdData({ ...newProdData, barcode: e.target.value })}
+                      className="flex-1 min-w-0 px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewProdData({ ...newProdData, barcode: generateBarcode() })}
+                      className="shrink-0 inline-flex items-center px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition cursor-pointer"
+                      title="Auto-generate a valid EAN-13 barcode"
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div>
@@ -1141,6 +1190,103 @@ export const InventoryManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Barcode Label Print Modal */}
+      {labelProduct && (() => {
+        const labelCode = (labelProduct.barcode || labelProduct.sku || '').trim();
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto">
+            <div className="bg-white text-slate-800 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 p-6 space-y-4 my-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-indigo-600" />
+                  Print Barcode Label
+                </h3>
+                <button onClick={() => setLabelProduct(null)} className="text-slate-400 hover:text-slate-900 p-1 rounded hover:bg-slate-100 transition cursor-pointer">
+                  ✕
+                </button>
+              </div>
+
+              <div>
+                <div className="text-sm font-bold text-slate-900 leading-tight">{labelProduct.name}</div>
+                <div className="text-xs text-slate-500 font-mono mt-0.5">
+                  Encodes: <span className="text-slate-700">{labelCode || '— none —'}</span>
+                </div>
+              </div>
+
+              {labelCode ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Label Style</label>
+                    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setLabelStyle('qr')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${labelStyle === 'qr' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                      >
+                        QR Code
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLabelStyle('barcode')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer ${labelStyle === 'barcode' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                      >
+                        Striped Barcode
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      QR scans on any phone camera. Striped barcodes need an Android/Chrome device or a USB scanner.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-center py-2">
+                    {labelStyle === 'qr' ? (
+                      <QRCodeRenderer value={labelCode} size={170} />
+                    ) : (
+                      <BarcodeRenderer value={labelCode} />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Copies</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={labelCopies}
+                      onChange={(e) => setLabelCopies(Math.max(1, Math.min(120, parseInt(e.target.value, 10) || 1)))}
+                      className="w-24 px-3 py-1.5 text-xs bg-slate-50 text-slate-900 border border-slate-200 rounded-lg font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setLabelProduct(null)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 cursor-pointer"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void printProductLabels(labelProduct, { symbology: labelStyle, copies: labelCopies })}
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-md shadow-indigo-950/40 inline-flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      Print {labelCopies > 1 ? `${labelCopies} Labels` : 'Label'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-3">
+                  This product has no barcode or SKU to encode. Add one first (use the ⚡ button to
+                  auto-generate a valid EAN-13), then print a label.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
