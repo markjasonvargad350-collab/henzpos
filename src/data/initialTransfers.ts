@@ -1,49 +1,16 @@
 import { StockTransferRecord } from '../types';
 
-// Branch name strings are hardcoded here (matching the other seed-data files) to
-// avoid a circular import with POSContext, which owns the BRANCH_MAIN/BRANCH_DJABEZ
-// constants. These strings must stay in sync with those constants.
-const BRANCH_MAIN = 'Main Branch - Casa Conching Bldg., Jalandoni St, Iloilo City Proper';
-const BRANCH_DJABEZ = "D'Jabez Branch - D'Jabez Bldg., 21 Gen. Luna St., Iloilo City Proper";
-
-export const INITIAL_TRANSFERS: StockTransferRecord[] = [
-  {
-    id: 'tr-001',
-    transferNumber: 'HENZ-TR-20260816-01',
-    timestamp: '2026-08-16 09:30',
-    productId: 'prod-001',
-    productName: 'Examination Latex Gloves Powder-Free (Medium)',
-    sku: 'PPE-GLV-LAT-M',
-    fromBranch: BRANCH_MAIN,
-    toBranch: BRANCH_DJABEZ,
-    quantity: 25,
-    transferredBy: 'Warehouse Logistics Staff (Van #1)',
-    notes: 'Replenishment for BSN student surge',
-  },
-  {
-    id: 'tr-002',
-    transferNumber: 'HENZ-TR-20260815-02',
-    timestamp: '2026-08-15 14:10',
-    productId: 'prod-007',
-    productName: 'Aneroid Sphygmomanometer with Adult Cuff & Pouch',
-    sku: 'DIA-SPHYG-ANEROID',
-    fromBranch: BRANCH_MAIN,
-    toBranch: BRANCH_DJABEZ,
-    quantity: 15,
-    transferredBy: 'Stock Custodian Marcos',
-    notes: 'BSN 1st Year kit staging',
-  },
-  {
-    id: 'tr-003',
-    transferNumber: 'HENZ-TR-20260814-03',
-    timestamp: '2026-08-14 11:20',
-    productId: 'prod-041',
-    productName: 'Isopropyl Alcohol 70% with Moisturizer 500ml',
-    sku: 'ANT-ALC-70-ISOP-500',
-    fromBranch: BRANCH_MAIN,
-    toBranch: BRANCH_DJABEZ,
-    quantity: 30,
-    transferredBy: 'Staff Elena',
-    notes: 'Clinical Antiseptic replenishment',
-  },
-];
+// Production hygiene: this seed is intentionally EMPTY.
+//
+// Stock transfers are an immutable audit ledger (firestore.rules locks
+// stock_transfers to `update, delete: if false`), so demo transfers cannot be
+// removed from inside the app once seeded. On top of that, `seedIfEmpty`
+// (POSContext) re-creates defaults whenever the collection reports empty — so
+// demo transfers would reappear after any manual console cleanup. Keeping this
+// empty means the ledger only ever contains real inter-branch movements logged
+// from the Inventory screen.
+//
+// (The three original demo transfers — HENZ-TR-20260814/15/16 — were removed
+// here for real-world deployment. See git history to restore them for a demo
+// build.)
+export const INITIAL_TRANSFERS: StockTransferRecord[] = [];
