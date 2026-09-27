@@ -120,6 +120,37 @@ export interface HeldCart {
 
 export type PaymentMethod = 'Cash' | 'GCash' | 'Bank Payment';
 
+/**
+ * One bank account the store accepts transfers into. Shown in the checkout's
+ * bank dropdown; selecting it reveals its account name + number to the customer.
+ */
+export interface PaymentBankAccount {
+  bankName: string; // e.g. "BDO Unibank"
+  accountName: string; // name the account is registered under
+  accountNumber: string; // deposit account number shown to the customer
+}
+
+/**
+ * Owner-editable payment counter details, shared across BOTH branches and every
+ * terminal via a single Firestore `system` document (see POSContext). These
+ * replace the hard-coded placeholder GCash/bank numbers the checkout used to
+ * ship with, so the store owner sets their REAL accounts from Settings without a
+ * code change or a redeploy.
+ *
+ * `gcashQrImage` is an uploaded QR as a data URL (`data:image/png;base64,…`),
+ * kept small (the editor caps the upload) so the whole document stays well under
+ * Firestore's 1 MB limit. When it is empty the checkout shows a "not set" prompt
+ * instead of a fake scannable code.
+ */
+export interface PaymentDetails {
+  gcashName: string;
+  gcashNumber: string;
+  gcashQrImage: string;
+  bankAccounts: PaymentBankAccount[];
+  /** ISO timestamp of the last save, shown in the editor. */
+  updatedAt?: string;
+}
+
 export interface SaleTransaction {
   id: string;
   receiptNumber: string;

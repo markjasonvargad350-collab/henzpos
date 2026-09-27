@@ -11,6 +11,12 @@ export interface ReceiptSettings {
   showFdaLto: boolean;
   fdaLtoNumber: string;
   showCashierName: boolean;
+  /**
+   * Cashier / terminal name stamped on each sale from THIS device and printed
+   * on the receipt. Per-device (localStorage), because each terminal is usually
+   * a different counter. Blank falls back to a neutral "Cashier 1" at checkout.
+   */
+  defaultCashierName: string;
   showBarcode: boolean;
   showQrCode: boolean;
   customFooterNote: string;
@@ -27,6 +33,7 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   showFdaLto: true,
   fdaLtoNumber: 'FDA LTO-2023-01984 / CDRRHR Compliant',
   showCashierName: true,
+  defaultCashierName: '',
   showBarcode: true,
   showQrCode: true,
   customFooterNote: 'Thank you for choosing HENZ Healthcare Products Trading! | Hotline: +63 917 302 1995',

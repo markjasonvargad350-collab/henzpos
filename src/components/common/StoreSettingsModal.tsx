@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Building2,
@@ -15,18 +15,34 @@ import {
   KeyRound,
   Copy,
   ShieldCheck,
+  Wallet,
+  Landmark,
+  Plus,
+  Trash2,
+  Upload,
+  WifiOff,
 } from 'lucide-react';
 import { usePOS, BRANCH_MAIN, BRANCH_DJABEZ } from '../../context/POSContext';
 import { getReceiptSettings, saveReceiptSettings } from '../../utils/receiptSettings';
 import { getEmailSettings, saveEmailSettings, EmailSettings } from '../../utils/emailNotifier';
 import { hashAdminCode } from '../../lib/adminCode';
+import { PaymentDetails, PaymentBankAccount } from '../../types';
 
 interface StoreSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type TabType = 'branch' | 'receipt' | 'email' | 'system';
+type TabType = 'branch' | 'receipt' | 'email' | 'payment' | 'system';
+
+// Deep-ish copy so the editor draft never mutates the live context value.
+const clonePaymentDetails = (d: PaymentDetails): PaymentDetails => ({
+  gcashName: d.gcashName,
+  gcashNumber: d.gcashNumber,
+  gcashQrImage: d.gcashQrImage,
+  bankAccounts: d.bankAccounts.map((b) => ({ ...b })),
+  updatedAt: d.updatedAt,
+});
 
 export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, onClose }) => {
   const {
@@ -39,6 +55,9 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
     logoutAdmin,
     databaseMeta,
     setIsDatabaseModalOpen,
+    paymentDetails,
+    updatePaymentDetails,
+    isCloudOnline,
   } = usePOS();
 
   const [activeTab, setActiveTab] = useState<TabType>('branch');
@@ -57,7 +76,77 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
   const [savedHash, setSavedHash] = useState('');
   const [hashCopied, setHashCopied] = useState(false);
 
+  // Payment counter editor (admin only). Edits are kept in a local draft and
+  // only pushed to the shared Firestore document on Save, so a background sync
+  // never yanks the fields out from under the owner mid-edit.
+  const [payDraft, setPayDraft] = useState<PaymentDetails>(() => clonePaymentDetails(paymentDetails));
+  const [qrError, setQrError] = useState<string | null>(null);
+
+  // Reload the draft from the latest saved details whenever the owner opens the
+  // Payment tab. (Kept simple on purpose: it re-reads on tab entry rather than
+  // live-merging, which would fight in-progress typing.)
+  useEffect(() => {
+    if (isOpen && activeTab === 'payment') {
+      setPayDraft(clonePaymentDetails(paymentDetails));
+      setQrError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeTab]);
+
   if (!isOpen) return null;
+
+  const handleQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQrError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setQrError('Please choose an image file (a PNG or JPG screenshot of your QR).');
+      return;
+    }
+    const MAX_BYTES = 500 * 1024;
+    if (file.size > MAX_BYTES) {
+      setQrError('That image is too large. Crop it to just the QR (under 500 KB) and try again.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setPayDraft((prev) => ({ ...prev, gcashQrImage: reader.result as string }));
+      }
+    };
+    reader.onerror = () => setQrError('Could not read that image. Please try another file.');
+    reader.readAsDataURL(file);
+    // Allow re-selecting the same file again later.
+    e.target.value = '';
+  };
+
+  const updateBankField = (idx: number, field: keyof PaymentBankAccount, value: string) => {
+    setPayDraft((prev) => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.map((b, i) => (i === idx ? { ...b, [field]: value } : b)),
+    }));
+  };
+
+  const addBankAccount = () => {
+    setPayDraft((prev) => ({
+      ...prev,
+      bankAccounts: [...prev.bankAccounts, { bankName: '', accountName: '', accountNumber: '' }],
+    }));
+  };
+
+  const removeBankAccount = (idx: number) => {
+    setPayDraft((prev) => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.filter((_, i) => i !== idx),
+    }));
+  };
+
+  const handleSavePayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    updatePaymentDetails(payDraft);
+    setSaveToast('Payment counter details saved and synced to all terminals.');
+    setTimeout(() => setSaveToast(null), 2800);
+  };
 
   const handleChangeAdminCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,6 +263,20 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
             <Mail className="w-4 h-4" />
             <span>Email Alerts</span>
           </button>
+
+          {userRole === 'admin' && (
+            <button
+              onClick={() => setActiveTab('payment')}
+              className={`px-4 py-2.5 text-xs font-bold border-b-2 transition flex items-center gap-2 cursor-pointer ${
+                activeTab === 'payment'
+                  ? 'border-emerald-600 text-emerald-700 bg-white rounded-t-lg'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Wallet className="w-4 h-4" />
+              <span>Payment Counter</span>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('system')}
@@ -301,6 +404,20 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
                   />
                 </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Default Cashier / Terminal Name</label>
+                  <input
+                    type="text"
+                    value={receiptSettings.defaultCashierName}
+                    onChange={(e) => setReceiptSettingsState({ ...receiptSettings, defaultCashierName: e.target.value })}
+                    placeholder="e.g. Ana — Main Counter"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Stamped on each sale from this device and printed on the receipt. Leave blank to
+                    use a neutral &quot;Cashier 1&quot;.
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -371,6 +488,203 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({ isOpen, 
                 >
                   <Save className="w-4 h-4" />
                   <span>Save Email Configuration</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* TAB: PAYMENT COUNTER (admin only) */}
+          {activeTab === 'payment' && userRole === 'admin' && (
+            <form onSubmit={handleSavePayment} className="space-y-4 text-xs">
+              <p className="text-slate-600">
+                These accounts appear on the checkout screen when a customer pays by GCash or bank
+                transfer. Set your <b>real</b> store accounts here — they sync to every terminal at
+                both branches. Nothing is charged automatically; the cashier still types the
+                customer&apos;s reference number to confirm each payment.
+              </p>
+
+              {!isCloudOnline && (
+                <div className="p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl flex items-center gap-2 font-medium">
+                  <WifiOff className="w-4 h-4 shrink-0 text-amber-600" />
+                  <span>
+                    You&apos;re offline. Reconnect to save payment details so every terminal gets the
+                    same values.
+                  </span>
+                </div>
+              )}
+
+              {/* GCash */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-blue-600" />
+                  GCash
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">GCash Account Name</label>
+                    <input
+                      type="text"
+                      value={payDraft.gcashName}
+                      onChange={(e) => setPayDraft({ ...payDraft, gcashName: e.target.value })}
+                      placeholder="e.g. HENZ Health Care Products Trading"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">GCash Number</label>
+                    <input
+                      type="text"
+                      inputMode="tel"
+                      value={payDraft.gcashNumber}
+                      onChange={(e) => setPayDraft({ ...payDraft, gcashNumber: e.target.value })}
+                      placeholder="e.g. 0917 123 4567"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">GCash QR Code (optional)</label>
+                  <div className="flex items-center gap-3">
+                    <div className="shrink-0 w-20 h-20 rounded-lg border border-slate-300 bg-white flex items-center justify-center overflow-hidden">
+                      {payDraft.gcashQrImage ? (
+                        <img
+                          src={payDraft.gcashQrImage}
+                          alt="GCash QR preview"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <Wallet className="w-6 h-6 text-slate-300" />
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700 cursor-pointer transition">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{payDraft.gcashQrImage ? 'Replace QR image' : 'Upload QR image'}</span>
+                        <input type="file" accept="image/*" onChange={handleQrUpload} className="hidden" />
+                      </label>
+                      {payDraft.gcashQrImage && (
+                        <button
+                          type="button"
+                          onClick={() => setPayDraft({ ...payDraft, gcashQrImage: '' })}
+                          className="ml-2 inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
+                      )}
+                      <p className="text-[10px] text-slate-500">
+                        Screenshot your QR Ph from the GCash app and upload it (PNG/JPG, under 500 KB).
+                        Leave empty to show your GCash number only.
+                      </p>
+                    </div>
+                  </div>
+                  {qrError && <p className="text-[11px] text-rose-600 font-semibold mt-1.5">{qrError}</p>}
+                </div>
+              </div>
+
+              {/* Bank accounts */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <Landmark className="w-4 h-4 text-indigo-600" />
+                    Bank Accounts
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={addBankAccount}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700 cursor-pointer transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add account</span>
+                  </button>
+                </div>
+
+                {payDraft.bankAccounts.length === 0 ? (
+                  <p className="text-slate-500">
+                    No bank accounts yet. Add one so &quot;Bank Transfer&quot; shows real details at
+                    checkout, or leave this empty if you only accept Cash and GCash.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {payDraft.bankAccounts.map((acct, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-white p-3 rounded-lg border border-slate-200 space-y-2 relative"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-500">
+                            Account {idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeBankAccount(idx)}
+                            className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Bank Name</label>
+                            <input
+                              type="text"
+                              value={acct.bankName}
+                              onChange={(e) => updateBankField(idx, 'bankName', e.target.value)}
+                              placeholder="e.g. BDO Unibank"
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Account Name</label>
+                            <input
+                              type="text"
+                              value={acct.accountName}
+                              onChange={(e) => updateBankField(idx, 'accountName', e.target.value)}
+                              placeholder="Registered account holder"
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="font-bold text-slate-700 block mb-1">Account Number</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={acct.accountNumber}
+                              onChange={(e) => updateBankField(idx, 'accountNumber', e.target.value)}
+                              placeholder="e.g. 0048-2910-4491"
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-[10px] text-slate-500">
+                      A bank row is saved only when it has a bank name. Empty rows are discarded.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {payDraft.updatedAt && (
+                <p className="text-[10px] text-slate-400">
+                  Last saved {new Date(payDraft.updatedAt).toLocaleString()}
+                </p>
+              )}
+
+              <div className="pt-1">
+                <button
+                  type="submit"
+                  disabled={!isCloudOnline}
+                  className={`px-4 py-2 font-bold rounded-lg transition flex items-center gap-1.5 ${
+                    isCloudOnline
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save Payment Details</span>
                 </button>
               </div>
             </form>

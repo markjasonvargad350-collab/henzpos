@@ -18,7 +18,7 @@ import {
 import confetti from 'canvas-confetti';
 import { usePOS, branchStockField } from '../../context/POSContext';
 import { PaymentMethod, SaleTransaction } from '../../types';
-import { QRCodeRenderer } from '../common/QRCodeRenderer';
+import { getReceiptSettings } from '../../utils/receiptSettings';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -31,7 +31,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   onClose,
   onPaymentSuccess,
 }) => {
-  const { heldCarts, activeCartIndex, completeSale, products, activeBranch } = usePOS();
+  const { heldCarts, activeCartIndex, completeSale, products, activeBranch, paymentDetails } = usePOS();
   const currentCart = heldCarts[activeCartIndex];
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
@@ -39,13 +39,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [customerType, setCustomerType] = useState<SaleTransaction['customerType']>(
     currentCart?.customerType || 'Student'
   );
-  const [cashierName, setCashierName] = useState('Elena (Cashier 1)');
+  const [cashierName, setCashierName] = useState(() => getReceiptSettings().defaultCashierName || '');
   const [discountPercent, setDiscountPercent] = useState<number>(
     currentCart?.customerType === 'Student' ? 5 : 0
   );
   const [cashTendered, setCashTendered] = useState<string>('');
   const [gcashRef, setGcashRef] = useState('');
-  const [selectedBank, setSelectedBank] = useState('BDO Unibank');
+  const [selectedBank, setSelectedBank] = useState('');
   const [bankRef, setBankRef] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(true);
@@ -56,11 +56,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   // This modal stays mounted between sales, so the override has to be cleared
   // explicitly on each open or it would silently stay on for the next customer.
+  // Re-reading the cashier default here also picks up a name changed in Settings
+  // since this terminal loaded.
   useEffect(() => {
     if (!isOpen) return;
     setOverrideStock(false);
     setErrorMessage(null);
+    setCashierName(getReceiptSettings().defaultCashierName || '');
   }, [isOpen]);
+
+  // Keep the bank selection pointed at a configured account: default to the
+  // first one, and repair itself if the chosen bank is edited or removed in
+  // Settings while this modal is open.
+  useEffect(() => {
+    const names = paymentDetails.bankAccounts.map((b) => b.bankName);
+    setSelectedBank((cur) => (cur && names.includes(cur) ? cur : names[0] || ''));
+  }, [paymentDetails.bankAccounts]);
 
   if (!isOpen || !currentCart || currentCart.items.length === 0) return null;
 
@@ -88,6 +99,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const numTendered = parseFloat(cashTendered) || 0;
   const changeDue = Math.max(0, numTendered - grandTotal);
   const isCashSufficient = paymentMethod !== 'Cash' || numTendered >= grandTotal;
+
+  // The bank account whose details to display, resolved from the dropdown.
+  const selectedAccount = paymentDetails.bankAccounts.find((b) => b.bankName === selectedBank);
 
   const handleProcessPayment = () => {
     setErrorMessage(null);
@@ -374,7 +388,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {paymentMethod === 'GCash' && (
             <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 flex flex-col sm:flex-row items-center gap-4">
               <div className="shrink-0 text-center bg-white p-2 rounded-xl border border-blue-200 shadow-xs">
-                <QRCodeRenderer value={`HENZ-GCASH-PAY-${grandTotal}-PHP`} size={110} />
+                {paymentDetails.gcashQrImage ? (
+                  <img
+                    src={paymentDetails.gcashQrImage}
+                    alt="Store GCash QR code"
+                    className="w-[110px] h-[110px] object-contain rounded-lg bg-white"
+                  />
+                ) : (
+                  <div className="w-[110px] h-[110px] flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-blue-300 text-blue-400">
+                    <Smartphone className="w-6 h-6" />
+                    <span className="text-[9px] font-semibold leading-tight px-1">
+                      No QR set — pay to the number
+                    </span>
+                  </div>
+                )}
                 <span className="text-[10px] text-slate-800 font-bold block mt-1">
                   Scan to Pay GCash
                 </span>
@@ -382,10 +409,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <div className="flex-1 space-y-2 w-full">
                 <div>
                   <span className="text-xs font-bold text-blue-900 block">
-                    HENZ Health Care Trading Official GCash
+                    {paymentDetails.gcashName || 'GCash not configured'}
                   </span>
                   <p className="text-[11px] text-blue-700">
-                    Account: 0917-555-HENZ (0917-555-4369)
+                    {paymentDetails.gcashNumber
+                      ? `Account: ${paymentDetails.gcashNumber}`
+                      : 'Set your GCash name & number in Settings → Payment Counter.'}
                   </p>
                 </div>
                 <div>
@@ -407,40 +436,63 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           {/* Bank Inputs */}
           {paymentMethod === 'Bank Payment' && (
             <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Depository Bank:
-                  </label>
-                  <select
-                    value={selectedBank}
-                    onChange={(e) => setSelectedBank(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white text-slate-900 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  >
-                    <option value="BDO Unibank">BDO Unibank (Iloilo)</option>
-                    <option value="Bank of the Philippine Islands (BPI)">BPI (Iloilo City)</option>
-                    <option value="Landbank of the Philippines">Landbank (Pavia Hub)</option>
-                    <option value="Metrobank">Metrobank (Iloilo)</option>
-                    <option value="UnionBank of the Philippines">UnionBank</option>
-                  </select>
+              {paymentDetails.bankAccounts.length === 0 ? (
+                <div className="text-[11px] text-indigo-900 bg-white p-3 rounded-lg border border-indigo-200 font-medium">
+                  No bank accounts are set up yet. Add them in{' '}
+                  <span className="font-bold">Settings → Payment Counter</span> so they appear here,
+                  or ask the customer to pay by Cash or GCash.
                 </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Depository Bank:
+                      </label>
+                      <select
+                        value={selectedBank}
+                        onChange={(e) => setSelectedBank(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white text-slate-900 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                      >
+                        {paymentDetails.bankAccounts.map((b) => (
+                          <option key={b.bankName} value={b.bankName}>
+                            {b.bankName}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Bank Reference / Transaction ID:
-                  </label>
-                  <input
-                    type="text"
-                    value={bankRef}
-                    onChange={(e) => setBankRef(e.target.value)}
-                    placeholder="e.g. BDO-TRX-98214"
-                    className="w-full px-3 py-2 text-xs bg-white text-slate-900 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                  />
-                </div>
-              </div>
-              <div className="text-[11px] text-indigo-900 bg-white p-2 rounded-lg border border-indigo-200 font-medium">
-                HENZ Health Care Trading Account: <span className="font-mono font-bold text-slate-900">0048-2910-4491</span>
-              </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Bank Reference / Transaction ID:
+                      </label>
+                      <input
+                        type="text"
+                        value={bankRef}
+                        onChange={(e) => setBankRef(e.target.value)}
+                        placeholder="e.g. BDO-TRX-98214"
+                        className="w-full px-3 py-2 text-xs bg-white text-slate-900 border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                  {selectedAccount && (
+                    <div className="text-[11px] text-indigo-900 bg-white p-2.5 rounded-lg border border-indigo-200 font-medium space-y-0.5">
+                      {selectedAccount.accountName && (
+                        <div>
+                          Account Name:{' '}
+                          <span className="font-bold text-slate-900">{selectedAccount.accountName}</span>
+                        </div>
+                      )}
+                      <div>
+                        Account Number:{' '}
+                        <span className="font-mono font-bold text-slate-900">
+                          {selectedAccount.accountNumber || '—'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 

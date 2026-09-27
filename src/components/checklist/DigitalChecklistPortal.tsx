@@ -63,6 +63,7 @@ export const DigitalChecklistPortal: React.FC = () => {
     setIsAdminLoginModalOpen,
     isAdminAuthenticated,
     preOrders,
+    paymentDetails,
   } = usePOS();
 
   // Portal Navigation Tabs: 'order' (Build Checklist) vs 'track' (Order Status Tracker)
@@ -867,7 +868,9 @@ export const DigitalChecklistPortal: React.FC = () => {
                 >
                   <Smartphone className="w-4 h-4" />
                   <span>Pay Now (GCash)</span>
-                  <span className="text-[9px] font-normal opacity-80">(0917-888-HENZ)</span>
+                  <span className="text-[9px] font-normal opacity-80">
+                    {paymentDetails.gcashNumber || 'Pay via GCash'}
+                  </span>
                 </button>
 
                 <button
@@ -881,7 +884,11 @@ export const DigitalChecklistPortal: React.FC = () => {
                 >
                   <Wallet className="w-4 h-4" />
                   <span>Pay Now (Bank)</span>
-                  <span className="text-[9px] font-normal opacity-80">(BDO / BPI / UnionBank)</span>
+                  <span className="text-[9px] font-normal opacity-80">
+                    {paymentDetails.bankAccounts.length > 0
+                      ? paymentDetails.bankAccounts.map((b) => b.bankName).join(' / ')
+                      : 'Bank Transfer'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -890,19 +897,50 @@ export const DigitalChecklistPortal: React.FC = () => {
               <div className="p-3.5 bg-blue-50 rounded-xl border border-blue-200 space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-blue-700">
                   <span>{paymentOption === 'GCash' ? 'GCash Merchant QR / Number' : 'Bank Transfer Details'}</span>
-                  <span className="text-[10px] text-slate-500 font-normal">Account: HENZ HEALTH CARE</span>
+                  {paymentOption === 'GCash' && paymentDetails.gcashName && (
+                    <span className="text-[10px] text-slate-500 font-normal">{paymentDetails.gcashName}</span>
+                  )}
                 </div>
                 <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200">
                   {paymentOption === 'GCash' ? (
-                    <div>
-                      <p className="font-mono font-bold text-emerald-600">GCash: 0917-555-4369 (HENZ Trading)</p>
-                      <p className="text-slate-500 text-[10px] mt-0.5">Please send the exact estimated total (₱{estimatedTotal.toLocaleString()}) and paste the Reference # below.</p>
+                    paymentDetails.gcashNumber || paymentDetails.gcashQrImage ? (
+                      <div className="space-y-1.5">
+                        {paymentDetails.gcashQrImage && (
+                          <img
+                            src={paymentDetails.gcashQrImage}
+                            alt="GCash QR code"
+                            className="w-32 h-32 object-contain mx-auto rounded-lg border border-slate-200 bg-white"
+                          />
+                        )}
+                        {paymentDetails.gcashNumber && (
+                          <p className="font-mono font-bold text-emerald-600 text-center">
+                            {paymentDetails.gcashNumber}
+                            {paymentDetails.gcashName ? ` (${paymentDetails.gcashName})` : ''}
+                          </p>
+                        )}
+                        <p className="text-slate-500 text-[10px] mt-0.5">Please send the exact estimated total (₱{estimatedTotal.toLocaleString()}) and paste the Reference # below.</p>
+                      </div>
+                    ) : (
+                      <p className="text-slate-500 text-[10px]">
+                        GCash isn't set up yet. Please choose <span className="font-bold">Pay Later</span> or contact the store to arrange payment.
+                      </p>
+                    )
+                  ) : paymentDetails.bankAccounts.length > 0 ? (
+                    <div className="space-y-1">
+                      {paymentDetails.bankAccounts.map((acct, i) => (
+                        <div key={i}>
+                          <p className="font-mono font-bold text-emerald-600">{acct.bankName}: {acct.accountNumber}</p>
+                          {acct.accountName && (
+                            <p className="font-mono text-slate-600 text-[10px]">Account: {acct.accountName}</p>
+                          )}
+                        </div>
+                      ))}
+                      <p className="text-slate-500 text-[10px] mt-0.5">Please transfer the exact estimated total (₱{estimatedTotal.toLocaleString()}) and paste the Reference # below.</p>
                     </div>
                   ) : (
-                    <div>
-                      <p className="font-mono font-bold text-emerald-600">BDO Unibank: 0021-8409-1822</p>
-                      <p className="font-mono text-slate-600 text-[10px]">BPI: 3829-1002-84 | Account: HENZ Health Care</p>
-                    </div>
+                    <p className="text-slate-500 text-[10px]">
+                      No bank accounts are set up yet. Please choose <span className="font-bold">Pay Later</span> or contact the store to arrange payment.
+                    </p>
                   )}
                 </div>
                 <label className="block text-[11px] font-bold text-slate-700">

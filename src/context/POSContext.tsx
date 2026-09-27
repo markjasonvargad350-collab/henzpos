@@ -14,11 +14,13 @@ import {
   SyncFailure,
   PurgeTarget,
   PurgeResult,
+  PaymentDetails,
 } from '../types';
 import { INITIAL_PRODUCTS } from '../data/initialProducts';
 import { INITIAL_PREORDERS } from '../data/initialPreOrders';
 import { INITIAL_TRANSFERS } from '../data/initialTransfers';
 import { PRESET_KITS } from '../data/presetKits';
+import { DEFAULT_PAYMENT_DETAILS } from '../data/paymentDetails';
 import { soundEffects } from '../utils/audio';
 import { dateStamp, newDocId, randomCode, uniqueSerial } from '../utils/ids';
 import { buildCsv, downloadCsv } from '../utils/exportCsv';
@@ -91,7 +93,13 @@ export const COLLECTIONS = {
   preOrders: 'preOrders',
   stockTransfers: 'stock_transfers',
   presetKits: 'preset_kits',
+  system: 'system',
 } as const;
+
+// Fixed document id inside the `system` collection that holds the store's shared
+// payment counter details (GCash / bank accounts). A single document so both
+// branches and every terminal read and write the same settings.
+const PAYMENT_DETAILS_DOC = 'paymentDetails';
 
 /**
  * Outcome of a staff sign-in attempt.
@@ -216,6 +224,13 @@ interface POSContextType {
    * `olderThanDays: null` means every record of that kind.
    */
   purgeOldRecords: (target: PurgeTarget, olderThanDays: number | null) => Promise<PurgeResult>;
+  /**
+   * The store's shared payment counter details (GCash / bank accounts), synced
+   * across every terminal via the Firestore `system` document. Falls back to
+   * blank placeholders until the owner sets real values in Settings.
+   */
+  paymentDetails: PaymentDetails;
+  updatePaymentDetails: (details: PaymentDetails) => void;
   isJulyPeakSeasonMode: boolean;
   setIsJulyPeakSeasonMode: (val: boolean | ((prev: boolean) => boolean)) => void;
   activeView: ActiveNavView;
@@ -435,6 +450,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Starter Checklist Preset Kits (Manageable & Persistent)
   const [presetKits, setPresetKits] = useState<PresetKit[]>([]);
+  // Shared payment counter details (GCash / bank accounts). Loaded from the
+  // Firestore `system` document; blank until the owner configures it.
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>(DEFAULT_PAYMENT_DETAILS);
 
   const [isJulyPeakSeasonMode, setIsJulyPeakSeasonMode] = useState<boolean>(true);
   const [activeView, setActiveView] = useState<ActiveNavView>(() => {
@@ -692,6 +710,33 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
       );
 
+      // 6. Shared payment counter details (GCash / bank accounts) — a single
+      //    document so both branches and every terminal show the same accounts
+      //    at checkout. Deliberately NOT seeded: an unconfigured store shows a
+      //    "set this up" prompt at checkout rather than a fabricated account
+      //    number, and the doc is created only when the owner first saves.
+      subscriptions.push(
+        onSnapshot(
+          doc(db, COLLECTIONS.system, PAYMENT_DETAILS_DOC),
+          { includeMetadataChanges: true },
+          (snap) => {
+            const data = snap.data() as Partial<PaymentDetails> | undefined;
+            if (data) {
+              setPaymentDetails({
+                gcashName: data.gcashName ?? '',
+                gcashNumber: data.gcashNumber ?? '',
+                gcashQrImage: data.gcashQrImage ?? '',
+                bankAccounts: Array.isArray(data.bankAccounts) ? data.bankAccounts : [],
+                updatedAt: data.updatedAt,
+              });
+            } else {
+              setPaymentDetails(DEFAULT_PAYMENT_DETAILS);
+            }
+          },
+          (err) => console.warn('Firestore payment-details listener:', err)
+        )
+      );
+
       // Cold-start reachability check. Before any listener has been acked, every
       // snapshot legitimately reads fromCache = true, so this probe (which forces
       // a server read) is what distinguishes "still connecting" from "genuinely
@@ -833,6 +878,33 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     writeAll(COLLECTIONS.preOrders, INITIAL_PREORDERS);
     writeAll(COLLECTIONS.stockTransfers, INITIAL_TRANSFERS);
     writeAll(COLLECTIONS.presetKits, PRESET_KITS);
+    soundEffects.playQRScanChime();
+  };
+
+  // Save the shared payment counter details (GCash / bank accounts) to the
+  // single `system` document, so the new values appear at checkout on every
+  // terminal. Values are trimmed and blank bank rows dropped before saving.
+  // Fire-and-forget with the app's usual offline semantics: an online write
+  // confirms via the listener; an offline write queues and syncs on reconnect.
+  // The editor gates Save on connectivity, so a rejection here is logged rather
+  // than surfaced twice.
+  const updatePaymentDetails = (details: PaymentDetails) => {
+    const payload: PaymentDetails = {
+      gcashName: details.gcashName.trim(),
+      gcashNumber: details.gcashNumber.trim(),
+      gcashQrImage: details.gcashQrImage,
+      bankAccounts: details.bankAccounts
+        .map((b) => ({
+          bankName: b.bankName.trim(),
+          accountName: b.accountName.trim(),
+          accountNumber: b.accountNumber.trim(),
+        }))
+        .filter((b) => b.bankName !== ''),
+      updatedAt: new Date().toISOString(),
+    };
+    setDoc(doc(db, COLLECTIONS.system, PAYMENT_DETAILS_DOC), payload).catch((err) =>
+      console.warn('Payment details save failed:', err)
+    );
     soundEffects.playQRScanChime();
   };
 
@@ -1637,6 +1709,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         importDatabaseJSON,
         resetDatabaseToDefaults,
         purgeOldRecords,
+        paymentDetails,
+        updatePaymentDetails,
         isJulyPeakSeasonMode,
         setIsJulyPeakSeasonMode,
         activeView,
