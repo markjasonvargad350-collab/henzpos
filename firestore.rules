@@ -38,8 +38,10 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
-    // Sales Transactions: readable by signed-in sessions; only staff may record
-    // a sale.
+    // Sales Transactions: readable by STAFF ONLY. The sales book is not customer
+    // data — an anonymous portal session has no reason to read it — so reads are
+    // closed to anonymous customers here, not just hidden in the UI. Only staff
+    // may record a sale.
     //
     // `update` stays permanently closed — a recorded sale can never be ALTERED,
     // which is the property that makes the sales report trustworthy as BIR
@@ -49,16 +51,17 @@ service cloud.firestore {
     // receipt is visible (the report total drops); silently editing one would
     // not be, which is why only the former is permitted.
     match /transactions/{transactionId} {
-      allow read: if isSignedIn();
+      allow read: if isStaff();
       allow create: if isStaff();
       allow update: if false;
       allow delete: if isStaff();
     }
 
-    // Stock Transfers: readable by signed-in sessions; only staff may log a
-    // transfer. Once logged, the audit record is immutable.
+    // Stock Transfers: readable by STAFF ONLY — internal inter-branch logistics
+    // that the customer portal never shows. Only staff may log a transfer; once
+    // logged, the audit record is immutable.
     match /stock_transfers/{transferId} {
-      allow read: if isSignedIn();
+      allow read: if isStaff();
       allow create: if isStaff();
       allow update, delete: if false;
     }

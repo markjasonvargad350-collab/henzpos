@@ -254,6 +254,11 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authReady, setAuthReady] = useState<boolean>(false);
   // Mirrors staff status for use inside the (stable) snapshot listener closure.
   const isStaffRef = useRef<boolean>(false);
+  // The same fact as a reactive value. The Firestore subscription effect keys off
+  // this so the staff-only listeners (sales, inter-branch transfers) attach the
+  // instant a staff member signs in — and are NEVER opened by an anonymous
+  // customer session, which the tightened read rules now reject server-side too.
+  const [isStaffSession, setIsStaffSession] = useState<boolean>(false);
 
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
   const [isAdminUnlockModalOpen, setIsAdminUnlockModalOpen] = useState(false);
@@ -504,6 +509,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!user) {
         // No session yet — provision an anonymous one so reads/writes carry a token.
         isStaffRef.current = false;
+        setIsStaffSession(false);
         setIsAdminAuthenticated(false);
         signInAnonymously(auth).catch((err) => {
           console.warn(
@@ -519,6 +525,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       const isStaff = !user.isAnonymous;
       isStaffRef.current = isStaff;
+      setIsStaffSession(isStaff);
       setIsAdminAuthenticated(isStaff);
       if (isStaff && !preorderPinned) {
         // Fresh sign-in lands on the limited staff tier; a token refresh while
@@ -619,8 +626,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
       );
 
-      // 2. Sales Transactions
-      subscriptions.push(
+      // 2. Sales Transactions — staff-only. Customers never read the sales book,
+      //    so an anonymous session must not open this listener; the tightened
+      //    `transactions` read rule enforces the same boundary server-side.
+      if (isStaffSession) subscriptions.push(
         onSnapshot(
           collection(db, COLLECTIONS.transactions),
           { includeMetadataChanges: true },
@@ -670,8 +679,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
       );
 
-      // 4. Inter-Branch Stock Transfers ledger
-      subscriptions.push(
+      // 4. Inter-Branch Stock Transfers ledger — staff-only, same reasoning as the
+      //    sales listener above; the customer portal never shows transfers.
+      if (isStaffSession) subscriptions.push(
         onSnapshot(
           collection(db, COLLECTIONS.stockTransfers),
           { includeMetadataChanges: true },
@@ -755,7 +765,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       subscriptions.forEach((unsub) => unsub());
     };
-  }, [authReady]);
+  }, [authReady, isStaffSession]);
 
   // Device-level connectivity events. Losing the interface means we are certainly
   // offline, so that is applied immediately. REGAINING it proves nothing — the
